@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
-
+from PyQt5.QtGui import QIcon
 from database import Database
 from excel_manager import import_cadets_from_excel, export_report_to_excel
 
@@ -50,7 +50,8 @@ QFrame#cardFrame {
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Строевая записка курса — Автоматизированный расход")
+        self.setWindowTitle("ConsumABLE — Управление строевой запиской")
+        self.setWindowIcon(QIcon("icon.png"))
         self.resize(1150, 780)
         self.db = Database()
         self.setStyleSheet(MODERN_STYLE)
