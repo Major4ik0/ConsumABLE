@@ -1,0 +1,252 @@
+import openpyxl
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from datetime import datetime
+
+def make_short_fio(full_name: str) -> str:
+    parts = full_name.strip().split()
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[1][0]}.{parts[2][0]}."
+    elif len(parts) == 2:
+        return f"{parts[0]} {parts[1][0]}."
+    return full_name
+
+def detect_gender(fio: str, explicit_val=None) -> str:
+    if explicit_val in ["М", "Ж"]:
+        return explicit_val
+    parts = fio.strip().split()
+    if len(parts) >= 3:
+        patronymic = parts[2].lower()
+        if patronymic.endswith("на"):
+            return "Ж"
+        if patronymic.endswith("ич") or patronymic.endswith("ыч"):
+            return "М"
+    if parts and (parts[0].lower().endswith("а") or parts[0].lower().endswith("я")):
+        return "Ж"
+    return "М"
+
+def import_cadets_from_excel(file_path):
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    ws = wb['БАЗА'] if 'БАЗА' in wb.sheetnames else wb.active
+    
+    cadets = []
+    seen_groups = []
+    
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if not row or not row[1]:
+            continue
+        rank = str(row[0] or "").strip()
+        fio = str(row[1]).strip()
+        group_raw = row[2]
+        group_num = str(int(group_raw)) if isinstance(group_raw, (int, float)) else str(group_raw or "").strip()
+        
+        if group_num and group_num not in seen_groups:
+            seen_groups.append(group_num)
+        sort_order = seen_groups.index(group_num) if group_num in seen_groups else 99
+        
+        short_fio = make_short_fio(fio)
+        raw_gender = row[5] if len(row) > 5 else None
+        gender = detect_gender(fio, raw_gender)
+        
+        cadets.append({
+            'rank': rank,
+            'fio': fio,
+            'short_fio': short_fio,
+            'group_num': group_num,
+            'gender': gender,
+            'sort_order': sort_order
+        })
+    return cadets
+
+def style_range(ws, cell_range, border=None, font=None, alignment=None, fill=None):
+    for row in ws[cell_range]:
+        for cell in row:
+            if border: cell.border = border
+            if font: cell.font = font
+            if alignment: cell.alignment = alignment
+            if fill: cell.fill = fill
+
+def export_report_to_excel(output_path, report_date, cadets, absences, unit_title, chief_title, chief_name, active_categories=None):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Расход"
+
+    bold_font = Font(name="Times New Roman", size=11, bold=True)
+    norm_font = Font(name="Times New Roman", size=11)
+    title_font = Font(name="Times New Roman", size=13, bold=True)
+    header_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    
+    thin = Side(border_style="thin", color="000000")
+    cell_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # 1. Заголовок
+    ws.merge_cells("B2:L2")
+    ws["B2"] = "РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА"
+    style_range(ws, "B2:L2", font=title_font, alignment=center)
+
+    ws.merge_cells("B3:L3")
+    ws["B3"] = unit_title
+    style_range(ws, "B3:L3", font=bold_font, alignment=center)
+
+    ws.merge_cells("B4:L4")
+    try:
+        dt_val = datetime.strptime(report_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except Exception:
+        dt_val = report_date
+    ws["B4"] = dt_val
+    style_range(ws, "B4:L4", font=norm_font, alignment=center)
+
+    # 2. Категории и группы
+    if active_categories:
+        categories = list(dict.fromkeys(active_categories))
+    else:
+        categories = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"]
+
+    group_order_map = {}
+    for c in cadets:
+        grp = c['group_num']
+        if grp not in group_order_map:
+            group_order_map[grp] = c.get('sort_order', 0)
+    groups = sorted(group_order_map.keys(), key=lambda g: group_order_map[g])
+
+    # Шапка сводки
+    start_row = 5
+    headers = ["№ п/п", "Подразд.", "П/С", "Н/Л"] + categories + ["ВСЕГО"]
+    
+    for idx, h in enumerate(headers[:-1], start=2):
+        cell = ws.cell(row=start_row, column=idx, value=h)
+        cell.font = bold_font
+        cell.fill = header_fill
+        cell.border = cell_border
+        cell.alignment = center
+    
+    # "ВСЕГО" объединяется на 2 колонки (K и L)
+    v_col = 2 + len(headers) - 1
+    ws.merge_cells(start_row=start_row, start_column=v_col, end_row=start_row, end_column=v_col+1)
+    ws.cell(row=start_row, column=v_col, value="ВСЕГО")
+    style_range(ws, f"{openpyxl.utils.get_column_letter(v_col)}{start_row}:{openpyxl.utils.get_column_letter(v_col+1)}{start_row}",
+                border=cell_border, font=bold_font, fill=header_fill, alignment=center)
+
+    curr_row = start_row + 1
+    total_ps = 0
+    total_nl = 0
+    cat_totals = {cat: 0 for cat in categories}
+
+    # Строки подразделений
+    for idx, grp in enumerate(groups, 1):
+        grp_cadets = [c for c in cadets if c['group_num'] == grp]
+        ps = len(grp_cadets)
+        grp_abs = [a for a in absences if a['group_num'] == grp]
+
+        row_counts = {}
+        for cat in categories:
+            cnt = sum(1 for a in grp_abs if a['category'] == cat)
+            row_counts[cat] = cnt
+            cat_totals[cat] += cnt
+
+        grp_abs_total = len(grp_abs)
+        nl = ps - grp_abs_total
+        total_ps += ps
+        total_nl += nl
+
+        vals = [idx, grp, ps, nl] + [row_counts[cat] if row_counts[cat] > 0 else "" for cat in categories]
+        for c_idx, val in enumerate(vals, start=2):
+            cell = ws.cell(row=curr_row, column=c_idx, value=val)
+            cell.font = norm_font
+            cell.border = cell_border
+            cell.alignment = center
+
+        ws.merge_cells(start_row=curr_row, start_column=v_col, end_row=curr_row, end_column=v_col+1)
+        ws.cell(row=curr_row, column=v_col, value=grp_abs_total if grp_abs_total > 0 else "")
+        style_range(ws, f"{openpyxl.utils.get_column_letter(v_col)}{curr_row}:{openpyxl.utils.get_column_letter(v_col+1)}{curr_row}",
+                    border=cell_border, font=norm_font, alignment=center)
+        curr_row += 1
+
+    # Строки «Мужчины» и «Женщины»
+    for g_label, g_val, num_idx in [("Мужчины", "М", len(groups) + 1), ("Женщины", "Ж", len(groups) + 2)]:
+        g_cadets = [c for c in cadets if c['gender'] == g_val]
+        g_ps = len(g_cadets)
+        g_abs = [a for a in absences if a['gender'] == g_val]
+        g_nl = g_ps - len(g_abs)
+
+        row_counts = {cat: sum(1 for a in g_abs if a['category'] == cat) for cat in categories}
+        vals = [num_idx, g_label, g_ps, g_nl] + [row_counts[cat] if row_counts[cat] > 0 else "" for cat in categories]
+
+        for c_idx, val in enumerate(vals, start=2):
+            cell = ws.cell(row=curr_row, column=c_idx, value=val)
+            cell.font = norm_font
+            cell.border = cell_border
+            cell.alignment = center
+
+        ws.merge_cells(start_row=curr_row, start_column=v_col, end_row=curr_row, end_column=v_col+1)
+        ws.cell(row=curr_row, column=v_col, value=len(g_abs) if len(g_abs) > 0 else "")
+        style_range(ws, f"{openpyxl.utils.get_column_letter(v_col)}{curr_row}:{openpyxl.utils.get_column_letter(v_col+1)}{curr_row}",
+                    border=cell_border, font=norm_font, alignment=center)
+        curr_row += 1
+
+    # Итоговая строка «Всего»
+    total_abs_all = sum(cat_totals.values())
+    summary_vals = [len(groups) + 3, "Всего", total_ps, total_nl] + [cat_totals[c] for c in categories]
+    for c_idx, val in enumerate(summary_vals, start=2):
+        cell = ws.cell(row=curr_row, column=c_idx, value=val)
+        cell.font = bold_font
+        cell.border = cell_border
+        cell.alignment = center
+
+    ws.merge_cells(start_row=curr_row, start_column=v_col, end_row=curr_row, end_column=v_col+1)
+    ws.cell(row=curr_row, column=v_col, value=total_abs_all)
+    style_range(ws, f"{openpyxl.utils.get_column_letter(v_col)}{curr_row}:{openpyxl.utils.get_column_letter(v_col+1)}{curr_row}",
+                border=cell_border, font=bold_font, alignment=center)
+    curr_row += 2
+
+    # 3. Список отсутствующих
+    ws.merge_cells(f"B{curr_row}:L{curr_row}")
+    ws[f"B{curr_row}"] = "Отсутствующие"
+    style_range(ws, f"B{curr_row}:L{curr_row}", font=bold_font, alignment=center)
+    curr_row += 1
+
+    # Заголовки таблицы отсутствующих
+    ws.cell(row=curr_row, column=2, value="№ п/п")
+    ws.cell(row=curr_row, column=3, value="В/звание")
+    ws.merge_cells(start_row=curr_row, start_column=4, end_row=curr_row, end_column=6)
+    ws.cell(row=curr_row, column=4, value="Фамилия и инициалы")
+    ws.merge_cells(start_row=curr_row, start_column=7, end_row=curr_row, end_column=8)
+    ws.cell(row=curr_row, column=7, value="Причина отсутствия")
+    ws.cell(row=curr_row, column=9, value="Подразд.")
+    ws.merge_cells(start_row=curr_row, start_column=10, end_row=curr_row, end_column=12)
+    ws.cell(row=curr_row, column=10, value="Примечание")
+    
+    style_range(ws, f"B{curr_row}:L{curr_row}", border=cell_border, font=bold_font, fill=header_fill, alignment=center)
+    curr_row += 1
+
+    # Заполнение отсутствующих
+    for idx, a in enumerate(absences, 1):
+        ws.cell(row=curr_row, column=2, value=idx).alignment = center
+        ws.cell(row=curr_row, column=3, value=a['rank']).alignment = center
+        
+        ws.merge_cells(start_row=curr_row, start_column=4, end_row=curr_row, end_column=6)
+        ws.cell(row=curr_row, column=4, value=a['short_fio'])
+        
+        ws.merge_cells(start_row=curr_row, start_column=7, end_row=curr_row, end_column=8)
+        ws.cell(row=curr_row, column=7, value=a['type_name']).alignment = center
+        
+        ws.cell(row=curr_row, column=9, value=a['group_num']).alignment = center
+        
+        ws.merge_cells(start_row=curr_row, start_column=10, end_row=curr_row, end_column=12)
+        ws.cell(row=curr_row, column=10, value=a['note'] or "")
+        
+        style_range(ws, f"B{curr_row}:L{curr_row}", border=cell_border, font=norm_font)
+        curr_row += 1
+
+    # 4. Подпись начальника
+    curr_row += 2
+    ws.cell(row=curr_row, column=2, value=chief_title).font = norm_font
+    curr_row += 1
+    ws.cell(row=curr_row, column=2, value=chief_name).font = bold_font
+
+    # Установка аккуратной ширины колонок
+    col_widths = {2: 8, 3: 12, 4: 15, 5: 6, 6: 6, 7: 16, 8: 6, 9: 10, 10: 15, 11: 15, 12: 15}
+    for c_idx, width in col_widths.items():
+        ws.column_dimensions[openpyxl.utils.get_column_letter(c_idx)].width = width
+
+    wb.save(output_path)
