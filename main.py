@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ConsumABLE — Управление строевой запиской")
-        self.setWindowIcon(QIcon("icon.png"))
+        self.setWindowIcon(QIcon("IMG_4793.jpeg"))
         self.resize(1150, 780)
         self.db = Database()
         self.setStyleSheet(MODERN_STYLE)
