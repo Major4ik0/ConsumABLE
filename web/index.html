@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConsumABLE — Управление строевой запиской</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- SheetJS (xlsx) для быстрого чтения и парсинга базы курсантов -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- ExcelJS для формирования стилизованного отчёта Excel с параметрами печати А4 -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+
+  <!-- Шапка приложения -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            <path d="M9 12h6"/>
+            <path d="M9 16h6"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">
+            ConsumABLE
+            <span class="brand-badge">Web In-Memory</span>
+          </div>
+          <div class="brand-subtitle">Автономное управление строевой запиской курса</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="security-badge" title="Все данные живут только в оперативной памяти вкладки. Никаких куки, localStorage или запросов на сервер!">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Strict In-Memory (Zero Persistence)
+        </div>
+
+        <input type="file" id="excelFileInput" accept=".xlsx, .xlsm" style="display: none;">
+        
+        <button class="btn btn-secondary" onclick="document.getElementById('excelFileInput').click()" title="Загрузить базу личного состава">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Загрузить базу (.xlsx)
+        </button>
+
+        <button class="btn btn-danger" onclick="resetAllData()" title="Очистить память вкладки">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Сбросить всё
+        </button>
+
+        <button class="btn btn-primary" onclick="generateExcelReport()" title="Скачать готовую строевую записку">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Скачать строевую (.xlsx)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Основное содержимое -->
+  <main class="main-content">
+
+    <!-- Вкладки навигации -->
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="expensesTab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+          <path d="M9 12h6"/>
+          <path d="M9 16h6"/>
+        </svg>
+        Строевая записка
+      </button>
+
+      <button class="tab-btn" data-tab="cadetsTab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Личный состав
+      </button>
+
+      <button class="tab-btn" data-tab="reasonsTab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Справочник причин
+      </button>
+
+      <button class="tab-btn" data-tab="previewTab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        Сводная таблица (Предпросмотр)
+      </button>
+    </nav>
+
+    <!-- ВКЛАДКА 1: СТРОЕВАЯ ЗАПИСКА -->
+    <div id="expensesTab" class="tab-pane active">
+
+      <!-- Карточка настроек шапки -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Параметры строевой записки
+          </div>
+        </div>
+
+        <div class="grid-4">
+          <div class="form-group">
+            <label class="form-label" for="reportDate">Дата расхода</label>
+            <input type="date" id="reportDate" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="unitTitle">Наименование подразделения</label>
+            <input type="text" id="unitTitle" class="form-input" placeholder="Например: 3 курс 1 факультета...">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="chiefTitle">Должность начальника</label>
+            <input type="text" id="chiefTitle" class="form-input" placeholder="Например: Начальник 3 курса 1 факультета">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="chiefName">В/звание и фамилия</label>
+            <input type="text" id="chiefName" class="form-input" placeholder="майор                          В.Медков">
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Бейджи -->
+      <div class="kpi-grid">
+        <div class="kpi-card total">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="kpi-label">По списку (П/С)</div>
+            <div id="kpiTotal" class="kpi-value">0 чел.</div>
+          </div>
+        </div>
+
+        <div class="kpi-card present">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+          <div>
+            <div class="kpi-label">В строю (Н/Л)</div>
+            <div id="kpiPresent" class="kpi-value">0 чел.</div>
+          </div>
+        </div>
+
+        <div class="kpi-card absent">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <div class="kpi-label">В расходе (Всего)</div>
+            <div id="kpiAbsent" class="kpi-value">0 чел.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Форма добавления в расход -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Добавить курсанта в расход
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-bottom: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="absenceCadetSelect">Курсант (поиск и выбор)</label>
+            <input type="text" id="cadetFilterInput" class="form-input" placeholder="Быстрый фильтр по фамилии..." style="margin-bottom: 6px;">
+            <select id="absenceCadetSelect" class="form-select">
+              <option value="">-- Выберите курсанта --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="absenceReasonSelect">Причина отсутствия</label>
+            <select id="absenceReasonSelect" class="form-select">
+              <option value="">-- Выберите причину --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="absenceNoteInput">Примечание</label>
+            <input type="text" id="absenceNoteInput" class="form-input" placeholder="Например: по наряду / г. Москва">
+          </div>
+        </div>
+
+        <!-- Дополнительные поля для своей причины -->
+        <div id="customReasonFields" class="grid-2" style="display: none; margin-bottom: 14px; background: var(--bg-subtle); padding: 12px; border-radius: var(--radius-sm);">
+          <div class="form-group">
+            <label class="form-label" for="customReasonName">Название своей причины</label>
+            <input type="text" id="customReasonName" class="form-input" placeholder="Например: Дежурный по парку">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="customReasonCategory">Категория в сводке</label>
+            <select id="customReasonCategory" class="form-select">
+              <option value="Наряд">Наряд</option>
+              <option value="Увольнение">Увольнение</option>
+              <option value="Госпиталь">Госпиталь</option>
+              <option value="Лазарет">Лазарет</option>
+              <option value="Командировка">Командировка</option>
+              <option value="Похороны">Похороны</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="addAbsenceBtn" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Добавить в расход
+        </button>
+      </div>
+
+      <!-- Таблица отсутствующих -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Список отсутствующих на дату
+          </div>
+          <span id="absenceCountBadge" class="badge badge-gray">0 чел.</span>
+        </div>
+
+        <div class="table-container">
+          <table id="absencesTable" class="data-table" style="display: none;">
+            <thead>
+              <tr>
+                <th class="col-center" style="width: 50px;">№</th>
+                <th style="width: 120px;">В/звание</th>
+                <th>Фамилия И.О.</th>
+                <th class="col-center" style="width: 100px;">Группа</th>
+                <th>Причина</th>
+                <th>Категория</th>
+                <th>Примечание</th>
+                <th class="col-center" style="width: 80px;">Действие</th>
+              </tr>
+            </thead>
+            <tbody id="absencesTableBody"></tbody>
+          </table>
+
+          <div id="absencesEmptyState" class="empty-state">
+            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div class="empty-state-title">Все курсанты находятся в строю</div>
+            <p>Добавьте курсантов в расход через форму выше или выгрузите строевую записку.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ВКЛАДКА 2: ЛИЧНЫЙ СОСТАВ -->
+    <div id="cadetsTab" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+            </svg>
+            База личного состава
+            <span id="cadetsCountBadge" class="badge badge-blue">0 чел.</span>
+          </div>
+
+          <div class="card-actions">
+            <button class="btn btn-primary btn-sm" onclick="openAddCadetModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Добавить курсанта
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('excelFileInput').click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Импорт из Excel
+            </button>
+          </div>
+        </div>
+
+        <!-- Поиск и фильтрация -->
+        <div class="grid-2" style="margin-bottom: 16px;">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="cadetSearchInput" class="form-input" placeholder="Поиск по ФИО, званию, группе...">
+          </div>
+
+          <div>
+            <select id="cadetGroupFilter" class="form-select">
+              <option value="">Все подразделения</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="cadetsTable" class="data-table" style="display: none;">
+            <thead>
+              <tr>
+                <th class="col-center" style="width: 50px;">№</th>
+                <th style="width: 120px;">В/звание</th>
+                <th>ФИО (полное)</th>
+                <th style="width: 160px;">Фамилия И.О.</th>
+                <th class="col-center" style="width: 110px;">Группа/Взвод</th>
+                <th class="col-center" style="width: 80px;">Пол</th>
+                <th class="col-center" style="width: 110px;">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="cadetsTableBody"></tbody>
+          </table>
+
+          <div id="cadetsEmptyState" class="empty-state">
+            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+            </svg>
+            <div class="empty-state-title">Список личного состава пуст</div>
+            <p>Загрузите файл Excel с базой или добавьте курсантов вручную.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ВКЛАДКА 3: СПРАВОЧНИК ПРИЧИН -->
+    <div id="reasonsTab" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Справочник причин отсутствия и категорий сводки
+          </div>
+        </div>
+
+        <!-- Форма добавления причины -->
+        <div class="grid-3" style="margin-bottom: 16px; background: var(--bg-subtle); padding: 14px; border-radius: var(--radius-md);">
+          <div class="form-group">
+            <label class="form-label" for="newReasonName">Название причины</label>
+            <input type="text" id="newReasonName" class="form-input" placeholder="Например: Патруль по гарнизону">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newReasonCategory">Категория в сводке</label>
+            <select id="newReasonCategory" class="form-select">
+              <option value="Наряд">Наряд</option>
+              <option value="Увольнение">Увольнение</option>
+              <option value="Госпиталь">Госпиталь</option>
+              <option value="Лазарет">Лазарет</option>
+              <option value="Командировка">Командировка</option>
+              <option value="Похороны">Похороны</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newReasonCode">Код (опционально)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="newReasonCode" class="form-input" placeholder="Н">
+              <button id="addReasonBtn" class="btn btn-primary" style="flex-shrink: 0;">
+                Добавить
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="col-center" style="width: 50px;">№</th>
+                <th>Название причины</th>
+                <th class="col-center" style="width: 100px;">Код</th>
+                <th>Категория сводки</th>
+                <th class="col-center" style="width: 90px;">Тип</th>
+              </tr>
+            </thead>
+            <tbody id="reasonsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ВКЛАДКА 4: СВОДНАЯ ТАБЛИЦА (ПРЕДПРОСМОТР) -->
+    <div id="previewTab" class="tab-pane">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            Интерактивный предпросмотр строевой записки
+          </div>
+          <button class="btn btn-primary" onclick="generateExcelReport()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Скачать строевую записку (.xlsx)
+          </button>
+        </div>
+
+        <div id="livePreviewContainer"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Модальное окно добавления/редактирования курсанта -->
+  <div id="cadetModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div id="cadetModalTitle" class="modal-title">Добавление курсанта</div>
+        <button class="modal-close" onclick="closeCadetModal()">
+          <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="cadetModalFio">Фамилия Имя Отчество</label>
+          <input type="text" id="cadetModalFio" class="form-input" placeholder="Иванов Иван Иванович">
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="cadetModalRank">Воинское звание</label>
+            <input type="text" id="cadetModalRank" class="form-input" placeholder="курсант">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="cadetModalGroup">Группа / Взвод</label>
+            <input type="text" id="cadetModalGroup" class="form-input" placeholder="1">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Пол (определяется автоматически)</label>
+          <div style="display: flex; gap: 20px; align-items: center; margin-top: 4px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" id="cadetModalGenderM" name="cadetModalGender" value="М" checked>
+              Мужской (М)
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="radio" id="cadetModalGenderF" name="cadetModalGender" value="Ж">
+              Женский (Ж)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCadetModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="saveCadetModal()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast контейнер -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
