@@ -6,22 +6,37 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0). Leave empty if not creating a release.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build:
+    name: Build (${{ matrix.arch }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: 'x64'
+            python-arch: 'x64'
+          - arch: 'x86'
+            python-arch: 'x86'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.11 (${{ matrix.arch }})
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: ${{ matrix.python-arch }}
 
       - name: Install dependencies
         run: |
@@ -29,7 +44,7 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pillow
 
-      - name: Prepare icon
+      - name: Prepare Windows Icon
         shell: bash
         run: |
           python -c "
@@ -47,23 +62,100 @@ jobs:
         shell: cmd
         run: |
           if exist icon.ico (
-            pyinstaller --noconsole --onefile --clean --icon=icon.ico --hidden-import=PyQt5.QtSvg --add-data "icon.png;." --name "ConsumABLE" main.py
+            pyinstaller --noconsole --onefile --clean --icon=icon.ico --hidden-import=PyQt5.QtSvg --add-data "icon.png;." --name "ConsumABLE-${{ matrix.arch }}" main.py
           ) else (
-            pyinstaller --noconsole --onefile --clean --hidden-import=PyQt5.QtSvg --name "ConsumABLE" main.py
+            pyinstaller --noconsole --onefile --clean --hidden-import=PyQt5.QtSvg --name "ConsumABLE-${{ matrix.arch }}" main.py
           )
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ConsumABLE-Windows-x64
-          path: dist/ConsumABLE.exe
+          name: ConsumABLE-${{ matrix.arch }}
+          path: dist/ConsumABLE-${{ matrix.arch }}.exe
           retention-days: 14
 
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version_check
+        shell: bash
+        run: |
+          python3 -c "
+          import os, re
+
+          ref = os.environ.get('GITHUB_REF', '')
+          ref_name = os.environ.get('GITHUB_REF_NAME', '')
+          commit_msg = os.environ.get('COMMIT_MSG', '')
+          dispatch_ver = os.environ.get('DISPATCH_VER', '').strip()
+
+          tag = ''
+          is_release = 'false'
+
+          if dispatch_ver:
+              tag = dispatch_ver if dispatch_ver.lower().startswith('v') else f'v{dispatch_ver}'
+              is_release = 'true'
+          elif ref.startswith('refs/tags/'):
+              tag = ref_name
+              is_release = 'true'
+          else:
+              m = re.search(r'(?i)\b(?:v|version|версия|release|релиз)[\s_-]*([0-9]+(?:\.[0-9]+)*)\b', commit_msg)
+              if m:
+                  tag = f'v{m.group(1)}'
+                  is_release = 'true'
+
+          print(f'Detected tag: {tag}')
+          print(f'Is release: {is_release}')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+              f.write(f'tag={tag}\n')
+              f.write(f'is_release={is_release}\n')
+          "
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          DISPATCH_VER: ${{ inputs.version }}
+
+      - name: Download all build artifacts
+        if: steps.version_check.outputs.is_release == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ConsumABLE-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: List downloaded release assets
+        if: steps.version_check.outputs.is_release == 'true'
+        run: ls -la release-assets/
+
+      - name: Ensure tag exists in git
+        if: steps.version_check.outputs.is_release == 'true'
+        shell: bash
+        run: |
+          TAG="${{ steps.version_check.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
+            echo "Creating and pushing tag $TAG..."
+            git tag "$TAG" "${{ github.sha }}"
+            git push origin "$TAG" || true
+          else
+            echo "Tag $TAG already exists on remote."
+          fi
+
+      - name: Create or Update GitHub Release
+        if: steps.version_check.outputs.is_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ConsumABLE.exe
+          tag_name: ${{ steps.version_check.outputs.tag }}
+          name: ConsumABLE ${{ steps.version_check.outputs.tag }}
+          files: release-assets/*.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
