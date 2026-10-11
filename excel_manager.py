@@ -438,9 +438,14 @@ def export_report_to_excel(output_path, report_date, cadets, absences, unit_titl
 
     # 4. Подписи начальника
     curr_row += 1
-    ws.cell(row=curr_row, column=2, value=f"  {chief_title}").font = norm_font
+    ws.merge_cells(start_row=curr_row, start_column=2, end_row=curr_row, end_column=v_col2)
+    ws.cell(row=curr_row, column=2, value=chief_title.strip())
+    style_range(ws, f"B{curr_row}:{last_col_letter}{curr_row}", font=norm_font, alignment=center)
+
     curr_row += 1
-    ws.cell(row=curr_row, column=2, value=chief_name).font = norm_font
+    ws.merge_cells(start_row=curr_row, start_column=2, end_row=curr_row, end_column=v_col2)
+    ws.cell(row=curr_row, column=2, value=chief_name)
+    style_range(ws, f"B{curr_row}:{last_col_letter}{curr_row}", font=norm_font, alignment=center)
 
     # 5. Ширина колонок
     col_widths = {

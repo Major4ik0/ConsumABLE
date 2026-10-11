@@ -9,9 +9,9 @@
 const state = {
   settings: {
     reportDate: getTodayDateString(),
-    unitTitle: "3 курс 1 факультета (автоматизированных систем управления)",
-    chiefTitle: "Начальник 3 курса 1 факультета",
-    chiefName: "майор                          В.Медков"
+    unitTitle: "* курс * факультета (автоматизированных систем управления)",
+    chiefTitle: "Начальник * курса * факультета",
+    chiefName: "майор                          *. ********"
   },
   cadets: [],
   absences: [],
@@ -22,7 +22,8 @@ const state = {
     { id: 4, name: "Увольнение", code: "УВ", category: "Увольнение" },
     { id: 5, name: "Госпиталь", code: "Г", category: "Госпиталь" },
     { id: 6, name: "Лазарет", code: "Л", category: "Лазарет" },
-    { id: 7, name: "Командировка", code: "К", category: "Командировка" }
+    { id: 7, name: "Командировка", code: "К", category: "Командировка" },
+    { id: 8, name: "Мог", code: "Н", category: "Наряд" }
   ],
   standardCategories: ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны", "Увольнение"]
 };
@@ -592,11 +593,14 @@ async function generateExcelReport() {
 
   // 4. Подписи начальника
   currRow++;
-  ws.getCell(currRow, 2).value = `  ${state.settings.chiefTitle}`;
-  ws.getCell(currRow, 2).font = normFont;
+  ws.mergeCells(currRow, 2, currRow, v_col2);
+  ws.getCell(currRow, 2).value = state.settings.chiefTitle.trim();
+  applyStyleToRange(ws, currRow, 2, currRow, v_col2, { font: normFont, alignment: centerAlign });
+
   currRow++;
+  ws.mergeCells(currRow, 2, currRow, v_col2);
   ws.getCell(currRow, 2).value = state.settings.chiefName;
-  ws.getCell(currRow, 2).font = normFont;
+  applyStyleToRange(ws, currRow, 2, currRow, v_col2, { font: normFont, alignment: centerAlign });
 
   // 5. Ширина колонок
   const colWidths = {
@@ -683,9 +687,14 @@ function updateCadetSelectOptions() {
   const availableCadets = state.cadets.filter(c => {
     if (absentCadetIds.has(c.id)) return false;
     if (!filterText) return true;
-    return c.fio.toLowerCase().includes(filterText) ||
-           c.group_num.toLowerCase().includes(filterText) ||
-           c.rank.toLowerCase().includes(filterText);
+    const fio = String(c.fio || "").toLowerCase();
+    const shortFio = String(c.short_fio || "").toLowerCase();
+    const rank = String(c.rank || "").toLowerCase();
+    const grp = String(c.group_num || "").toLowerCase();
+    return fio.includes(filterText) ||
+           shortFio.includes(filterText) ||
+           rank.includes(filterText) ||
+           grp.includes(filterText);
   });
 
   availableCadets.forEach(c => {
@@ -695,7 +704,9 @@ function updateCadetSelectOptions() {
     select.appendChild(opt);
   });
 
-  if (currentVal && availableCadets.some(c => String(c.id) === String(currentVal))) {
+  if (filterText && availableCadets.length === 1) {
+    select.value = availableCadets[0].id;
+  } else if (currentVal && availableCadets.some(c => String(c.id) === String(currentVal))) {
     select.value = currentVal;
   }
 }
@@ -760,6 +771,30 @@ function removeAbsence(absenceId) {
   showToast("Курсант возвращен в строй", "info");
 }
 
+function updateCadetGroupFilterOptions() {
+  const filterGroupSelect = document.getElementById("cadetGroupFilter");
+  if (!filterGroupSelect) return;
+
+  const currentFilter = filterGroupSelect.value;
+  const groups = [...new Set(state.cadets.map(c => String(c.group_num || "").trim()))].filter(Boolean).sort((a, b) => {
+    const na = Number(a), nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+
+  filterGroupSelect.innerHTML = '<option value="">Все подразделения</option>';
+  groups.forEach(g => {
+    const opt = document.createElement("option");
+    opt.value = g;
+    opt.textContent = `${g} взвод / группа`;
+    filterGroupSelect.appendChild(opt);
+  });
+
+  if (groups.includes(currentFilter)) {
+    filterGroupSelect.value = currentFilter;
+  }
+}
+
 function renderCadetsTable() {
   const tbody = document.getElementById("cadetsTableBody");
   const emptyState = document.getElementById("cadetsEmptyState");
@@ -770,36 +805,33 @@ function renderCadetsTable() {
 
   if (!tbody) return;
 
-  if (countEl) countEl.textContent = `${state.cadets.length} чел.`;
-
-  // Обновление фильтра подразделений
-  if (filterGroupSelect) {
-    const currentFilter = filterGroupSelect.value;
-    const groups = [...new Set(state.cadets.map(c => c.group_num))].sort();
-    filterGroupSelect.innerHTML = '<option value="">Все подразделения</option>';
-    groups.forEach(g => {
-      const opt = document.createElement("option");
-      opt.value = g;
-      opt.textContent = `${g} взвод / группа`;
-      filterGroupSelect.appendChild(opt);
-    });
-    if (groups.includes(currentFilter)) {
-      filterGroupSelect.value = currentFilter;
-    }
-  }
-
   const searchText = searchInput ? searchInput.value.trim().toLowerCase() : "";
-  const selectedGroup = filterGroupSelect ? filterGroupSelect.value : "";
+  const selectedGroup = filterGroupSelect ? filterGroupSelect.value.trim() : "";
 
   const filtered = state.cadets.filter(c => {
-    if (selectedGroup && c.group_num !== selectedGroup) return false;
+    if (selectedGroup && String(c.group_num || "").trim() !== selectedGroup) {
+      return false;
+    }
     if (searchText) {
-      return c.fio.toLowerCase().includes(searchText) ||
-             c.rank.toLowerCase().includes(searchText) ||
-             c.group_num.toLowerCase().includes(searchText);
+      const fio = String(c.fio || "").toLowerCase();
+      const shortFio = String(c.short_fio || "").toLowerCase();
+      const rank = String(c.rank || "").toLowerCase();
+      const grp = String(c.group_num || "").toLowerCase();
+      return fio.includes(searchText) ||
+             shortFio.includes(searchText) ||
+             rank.includes(searchText) ||
+             grp.includes(searchText);
     }
     return true;
   });
+
+  if (countEl) {
+    if (searchText || selectedGroup) {
+      countEl.textContent = `${filtered.length} из ${state.cadets.length} чел.`;
+    } else {
+      countEl.textContent = `${state.cadets.length} чел.`;
+    }
+  }
 
   if (filtered.length === 0) {
     if (table) table.style.display = "none";
@@ -842,6 +874,7 @@ function deleteCadet(cadetId) {
   state.cadets = state.cadets.filter(c => c.id !== cadetId);
   state.absences = state.absences.filter(a => a.cadet_id !== cadetId);
   updateKpi();
+  updateCadetGroupFilterOptions();
   renderCadetsTable();
   updateCadetSelectOptions();
   renderAbsencesTable();
@@ -1056,8 +1089,8 @@ function renderLivePreview() {
         </tbody>
       </table>
 
-      <div style="margin-top: 24px; font-size: 13px;">
-        <div style="margin-bottom: 8px;">&nbsp;&nbsp;${escapeHtml(state.settings.chiefTitle)}</div>
+      <div style="margin-top: 24px; font-size: 13px; text-align: center;">
+        <div style="margin-bottom: 8px;">${escapeHtml(state.settings.chiefTitle)}</div>
         <div style="white-space: pre;">${escapeHtml(state.settings.chiefName)}</div>
       </div>
     </div>
@@ -1188,6 +1221,7 @@ function saveCadetModal() {
 
   closeCadetModal();
   updateKpi();
+  updateCadetGroupFilterOptions();
   renderCadetsTable();
   updateCadetSelectOptions();
   renderAbsencesTable();
@@ -1214,6 +1248,7 @@ function resetAllData() {
   document.getElementById("chiefName").value = state.settings.chiefName;
 
   updateKpi();
+  updateCadetGroupFilterOptions();
   renderAbsencesTable();
   renderCadetsTable();
   updateCadetSelectOptions();
@@ -1330,6 +1365,7 @@ document.addEventListener("DOMContentLoaded", () => {
         state.absences = []; // Сброс расхода при новой загрузке базы
 
         updateKpi();
+        updateCadetGroupFilterOptions();
         renderCadetsTable();
         updateCadetSelectOptions();
         renderAbsencesTable();
@@ -1347,9 +1383,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Фильтр при выборе курсанта для расхода
   const cadetFilterInput = document.getElementById("cadetFilterInput");
+  const cadetSelectEl = document.getElementById("absenceCadetSelect");
+
   if (cadetFilterInput) {
     cadetFilterInput.addEventListener("input", () => {
       updateCadetSelectOptions();
+    });
+
+    cadetFilterInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const select = document.getElementById("absenceCadetSelect");
+        if (select && select.value) {
+          const reasonSelect = document.getElementById("absenceReasonSelect");
+          if (reasonSelect) reasonSelect.focus();
+        } else if (select && select.options.length > 1) {
+          select.selectedIndex = 1;
+          const selectedId = Number(select.value);
+          const cadet = state.cadets.find(c => c.id === selectedId);
+          if (cadet) {
+            cadetFilterInput.value = `${cadet.rank} ${cadet.short_fio} (${cadet.group_num} взв.)`;
+          }
+          const reasonSelect = document.getElementById("absenceReasonSelect");
+          if (reasonSelect) reasonSelect.focus();
+        }
+      }
+    });
+  }
+
+  if (cadetSelectEl) {
+    cadetSelectEl.addEventListener("change", () => {
+      const selectedId = Number(cadetSelectEl.value);
+      const cadet = state.cadets.find(c => c.id === selectedId);
+      if (cadet && cadetFilterInput) {
+        cadetFilterInput.value = `${cadet.rank} ${cadet.short_fio} (${cadet.group_num} взв.)`;
+      }
     });
   }
 
@@ -1371,7 +1439,27 @@ document.addEventListener("DOMContentLoaded", () => {
   if (addAbsenceBtn) {
     addAbsenceBtn.addEventListener("click", () => {
       const cadetSelect = document.getElementById("absenceCadetSelect");
-      const cadetId = Number(cadetSelect.value);
+      const filterInput = document.getElementById("cadetFilterInput");
+      let cadetId = Number(cadetSelect ? cadetSelect.value : 0);
+
+      // Если в select не выбрано, но пользователь ввел текст в поле фильтра:
+      if (!cadetId && filterInput && filterInput.value.trim()) {
+        const query = filterInput.value.trim().toLowerCase();
+        const absentCadetIds = new Set(state.absences.map(a => a.cadet_id));
+        const matched = state.cadets.filter(c => {
+          if (absentCadetIds.has(c.id)) return false;
+          const fio = String(c.fio || "").toLowerCase();
+          const shortFio = String(c.short_fio || "").toLowerCase();
+          const rank = String(c.rank || "").toLowerCase();
+          const grp = String(c.group_num || "").toLowerCase();
+          return fio.includes(query) || shortFio.includes(query) || rank.includes(query) || grp.includes(query);
+        });
+        if (matched.length > 0) {
+          cadetId = matched[0].id;
+          if (cadetSelect) cadetSelect.value = cadetId;
+        }
+      }
+
       if (!cadetId) {
         showToast("Выберите курсанта из списка!", "danger");
         return;
@@ -1488,9 +1576,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Инициализация стартовых таблиц
   updateKpi();
+  updateCadetGroupFilterOptions();
+  renderCadetsTable();
   renderReasonsTable();
   updateCadetSelectOptions();
   renderAbsencesTable();
-  renderCadetsTable();
   renderLivePreview();
 });
