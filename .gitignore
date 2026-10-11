@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# C extensions
+build/
+dist/
+*.manifest
+*.spec
+
+# Installer logs and build artifacts
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite databases (local personal data, cadet lists, daily absences)
+*.db
+*.sqlite
+*.sqlite3
+app_data.db
+
+# IDE and Editor settings
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Microsoft Excel temporary lock files and generated reports
+~$*.xlsx
+~$*.xlsm
+Строевая_записка_*.xlsx
+test_*.xlsx
+test_*.xlsm
+
+# Log files
+*.log

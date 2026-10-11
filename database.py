@@ -51,6 +51,7 @@ class Database:
                 )
             """)
             self._seed_defaults()
+            self._ensure_default_types()
 
     def _seed_defaults(self):
         cur = self.conn.cursor()
@@ -66,21 +67,34 @@ class Database:
         cur.execute("SELECT COUNT(*) FROM absence_types")
         if cur.fetchone()[0] == 0:
             types = [
-                ("Дежурный по курсу", "ДпК", "Наряд"),
-                ("Дневальный по курсу", "ДнК", "Наряд"),
-                ("Патруль", "ПАТР", "Наряд"),
-                ("Дежурный по 5 корпусу", "Дп5к", "Наряд"),
-                ("Дежурный по 6 корпусу", "Дп6к", "Наряд"),
-                ("Госпиталь", "ГОСП", "Госпиталь"),
-                ("Лазарет", "ЛАЗ", "Лазарет"),
-                ("Командировка", "КОМ", "Командировка"),
-                ("Похороны", "ПОХ", "Похороны"),
-                ("Отпуск", "ОТП", "Отпуск"),
+                ("Дежурный по курсу", "Н", "Наряд"),
+                ("Дневальный по курсу", "Н", "Наряд"),
+                ("Патруль", "Н", "Наряд"),
+                ("Увольнение", "У", "Увольнение"),
+                ("Госпиталь", "Г", "Госпиталь"),
+                ("Лазарет", "Л", "Лазарет"),
+                ("Командировка", "К", "Командировка"),
             ]
             self.conn.executemany(
                 "INSERT INTO absence_types (name, code, category) VALUES (?, ?, ?)",
                 types
             )
+
+    def _ensure_default_types(self):
+        # Исправление опечатки и добавление Увольнения в существующие БД
+        with self.conn:
+            self.conn.execute("""
+                UPDATE absence_types 
+                SET name = 'Увольнение', code = 'УВ', category = 'Увольнение' 
+                WHERE name IN ('Увальнение', 'увальнение', 'увольнение')
+            """)
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM absence_types WHERE name = 'Увольнение'")
+            if cur.fetchone()[0] == 0:
+                self.conn.execute("""
+                    INSERT INTO absence_types (name, code, category) 
+                    VALUES ('Увольнение', 'УВ', 'Увольнение')
+                """)
 
     def get_setting(self, key, default=""):
         cur = self.conn.cursor()
@@ -101,6 +115,62 @@ class Database:
             ORDER BY sort_order ASC, group_num ASC, fio ASC
         """)
         return [dict(r) for r in cur.fetchall()]
+
+    def get_cadet_by_id(self, cadet_id):
+        cur = self.conn.cursor()
+        cur.execute("""
+            SELECT id, rank, fio, short_fio, group_num, gender, sort_order 
+            FROM cadets 
+            WHERE id = ?
+        """, (cadet_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_distinct_groups(self):
+        cur = self.conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT group_num 
+            FROM cadets 
+            WHERE is_active = 1 
+            ORDER BY sort_order ASC, group_num ASC
+        """)
+        return [r[0] for r in cur.fetchall()]
+
+    def add_cadet(self, rank, fio, group_num, gender="М", short_fio=None):
+        if not short_fio:
+            from excel_manager import make_short_fio
+            short_fio = make_short_fio(fio)
+        cur = self.conn.cursor()
+        cur.execute("SELECT sort_order FROM cadets WHERE group_num = ? LIMIT 1", (group_num,))
+        row = cur.fetchone()
+        if row:
+            sort_order = row[0]
+        else:
+            cur.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM cadets")
+            sort_order = cur.fetchone()[0]
+
+        with self.conn:
+            cur = self.conn.execute("""
+                INSERT INTO cadets (rank, fio, short_fio, group_num, gender, sort_order, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
+            """, (rank, fio, short_fio, group_num, gender, sort_order))
+            return cur.lastrowid
+
+    def update_cadet(self, cadet_id, rank, fio, group_num, gender="М", short_fio=None):
+        if not short_fio:
+            from excel_manager import make_short_fio
+            short_fio = make_short_fio(fio)
+        with self.conn:
+            self.conn.execute("""
+                UPDATE cadets 
+                SET rank = ?, fio = ?, short_fio = ?, group_num = ?, gender = ?
+                WHERE id = ?
+            """, (rank, fio, short_fio, group_num, gender, cadet_id))
+
+    def delete_cadet(self, cadet_id):
+        with self.conn:
+            self.conn.execute("DELETE FROM daily_absences WHERE cadet_id = ?", (cadet_id,))
+            self.conn.execute("DELETE FROM cadets WHERE id = ?", (cadet_id,))
 
     def clear_and_import_cadets(self, cadets_list):
         with self.conn:
@@ -124,8 +194,49 @@ class Database:
 
     def get_absence_types(self):
         cur = self.conn.cursor()
-        cur.execute("SELECT id, name, code, category FROM absence_types ORDER BY category, name")
+        cur.execute("""
+            SELECT id, name, code, category 
+            FROM absence_types 
+            ORDER BY 
+                CASE category 
+                    WHEN 'Наряд' THEN 1 
+                    WHEN 'Увольнение' THEN 2 
+                    WHEN 'Госпиталь' THEN 3 
+                    WHEN 'Лазарет' THEN 4 
+                    WHEN 'Командировка' THEN 5 
+                    WHEN 'Похороны' THEN 6 
+                    WHEN 'Отпуск' THEN 7 
+                    ELSE 8 
+                END, 
+                name
+        """)
         return [dict(r) for r in cur.fetchall()]
+
+    def get_absence_type_by_id(self, type_id):
+        cur = self.conn.cursor()
+        cur.execute("SELECT id, name, code, category FROM absence_types WHERE id = ?", (type_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_distinct_categories(self):
+        cur = self.conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT category 
+            FROM absence_types 
+            ORDER BY 
+                CASE category 
+                    WHEN 'Наряд' THEN 1 
+                    WHEN 'Увольнение' THEN 2 
+                    WHEN 'Госпиталь' THEN 3 
+                    WHEN 'Лазарет' THEN 4 
+                    WHEN 'Командировка' THEN 5 
+                    WHEN 'Похороны' THEN 6 
+                    WHEN 'Отпуск' THEN 7 
+                    ELSE 8 
+                END, 
+                category
+        """)
+        return [r[0] for r in cur.fetchall()]
 
     def add_absence_type(self, name, code, category):
         with self.conn:
@@ -133,6 +244,14 @@ class Database:
                 "INSERT INTO absence_types (name, code, category) VALUES (?, ?, ?)",
                 (name, code, category)
             )
+
+    def update_absence_type(self, type_id, name, code, category):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE absence_types 
+                SET name = ?, code = ?, category = ? 
+                WHERE id = ?
+            """, (name, code, category, type_id))
 
     def delete_absence_type(self, type_id):
         with self.conn:
