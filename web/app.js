@@ -672,19 +672,10 @@ function updateKpi() {
   if (kpiAbsentEl) kpiAbsentEl.textContent = `${absent} чел.`;
 }
 
-function updateCadetSelectOptions() {
-  const select = document.getElementById("absenceCadetSelect");
-  const filterInput = document.getElementById("cadetFilterInput");
-  if (!select) return;
-
-  const filterText = filterInput ? filterInput.value.trim().toLowerCase() : "";
-  const currentVal = select.value;
-
-  select.innerHTML = '<option value="">-- Выберите курсанта --</option>';
-
+function getAvailableCadets(query = "") {
   const absentCadetIds = new Set(state.absences.map(a => a.cadet_id));
-
-  const availableCadets = state.cadets.filter(c => {
+  const filterText = String(query || "").trim().toLowerCase();
+  return state.cadets.filter(c => {
     if (absentCadetIds.has(c.id)) return false;
     if (!filterText) return true;
     const fio = String(c.fio || "").toLowerCase();
@@ -696,19 +687,34 @@ function updateCadetSelectOptions() {
            rank.includes(filterText) ||
            grp.includes(filterText);
   });
+}
 
-  availableCadets.forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.rank} ${c.fio} (${c.group_num} взв.)`;
-    select.appendChild(opt);
-  });
+function detectReasonCategory(reasonName) {
+  if (!reasonName) return "Наряд";
+  const low = reasonName.trim().toLowerCase();
 
-  if (filterText && availableCadets.length === 1) {
-    select.value = availableCadets[0].id;
-  } else if (currentVal && availableCadets.some(c => String(c.id) === String(currentVal))) {
-    select.value = currentVal;
-  }
+  const matched = state.absenceTypes.find(t => t.name.toLowerCase() === low);
+  if (matched) return matched.category;
+
+  if (low.includes("увольн") || low.includes("отпуск")) return "Увольнение";
+  if (low.includes("госпитал")) return "Госпиталь";
+  if (low.includes("лазарет") || low.includes("больнич") || low.includes("медпункт")) return "Лазарет";
+  if (low.includes("командир")) return "Командировка";
+  if (low.includes("похорон")) return "Похороны";
+  return "Наряд";
+}
+
+function getCategoryBadgeClass(category) {
+  if (category === "Увольнение") return "badge-green";
+  if (category === "Госпиталь" || category === "Лазарет") return "badge-red";
+  if (category === "Командировка") return "badge-purple";
+  if (category === "Похороны") return "badge-yellow";
+  return "badge-blue";
+}
+
+function updateCadetSelectOptions() {
+  const cadetDropdown = document.getElementById("cadetAutocompleteDropdown");
+  if (cadetDropdown) cadetDropdown.classList.remove("active");
 }
 
 function renderAbsencesTable() {
@@ -1381,121 +1387,374 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Фильтр при выборе курсанта для расхода
-  const cadetFilterInput = document.getElementById("cadetFilterInput");
-  const cadetSelectEl = document.getElementById("absenceCadetSelect");
+  // -------------------------------------------------------------
+  // АВТОПОДСТАНОВКА КУРСАНТА (ПРИ ВВОДЕ ФАМИЛИИ)
+  // -------------------------------------------------------------
+  const cadetInput = document.getElementById("absenceCadetInput");
+  const cadetIdInput = document.getElementById("absenceCadetId");
+  const cadetDropdown = document.getElementById("cadetAutocompleteDropdown");
 
-  if (cadetFilterInput) {
-    cadetFilterInput.addEventListener("input", () => {
-      updateCadetSelectOptions();
+  let cadetHighlightIndex = -1;
+
+  function renderCadetAutocomplete(query = "") {
+    if (!cadetDropdown) return;
+    const available = getAvailableCadets(query);
+    cadetHighlightIndex = -1;
+
+    if (available.length === 0) {
+      cadetDropdown.innerHTML = `<div class="autocomplete-empty">${state.cadets.length === 0 ? "Сначала загрузите базу личного состава" : "Курсанты не найдены"}</div>`;
+      cadetDropdown.classList.add("active");
+      return;
+    }
+
+    const maxItems = Math.min(available.length, 30);
+    let html = "";
+    for (let i = 0; i < maxItems; i++) {
+      const c = available[i];
+      html += `
+        <div class="autocomplete-item" data-id="${c.id}" data-index="${i}">
+          <div class="autocomplete-item-text">
+            <span style="color: var(--text-muted); font-size: 12px;">${escapeHtml(c.rank)}</span>
+            <strong>${escapeHtml(c.short_fio)}</strong>
+            <span style="font-size: 11px; color: var(--text-light);">(${escapeHtml(c.fio)})</span>
+          </div>
+          <span class="badge badge-gray">${escapeHtml(c.group_num)} взв.</span>
+        </div>
+      `;
+    }
+    cadetDropdown.innerHTML = html;
+    cadetDropdown.classList.add("active");
+
+    cadetDropdown.querySelectorAll(".autocomplete-item").forEach(item => {
+      item.addEventListener("mousedown", e => {
+        e.preventDefault();
+        const cid = Number(item.dataset.id);
+        const c = state.cadets.find(x => x.id === cid);
+        if (c) selectCadet(c);
+      });
+    });
+  }
+
+  function selectCadet(c) {
+    if (!c) return;
+    cadetIdInput.value = c.id;
+    cadetInput.value = `${c.rank} ${c.short_fio} (${c.group_num} взв.)`;
+    if (cadetDropdown) cadetDropdown.classList.remove("active");
+    cadetHighlightIndex = -1;
+
+    // Автоматический переход к вводу причины
+    const reasonInput = document.getElementById("absenceReasonInput");
+    if (reasonInput) {
+      reasonInput.focus();
+      renderReasonAutocomplete(reasonInput.value);
+    }
+  }
+
+  function updateCadetHighlight(items) {
+    items.forEach((it, idx) => {
+      if (idx === cadetHighlightIndex) {
+        it.classList.add("selected");
+        it.scrollIntoView({ block: "nearest" });
+      } else {
+        it.classList.remove("selected");
+      }
+    });
+  }
+
+  if (cadetInput) {
+    cadetInput.addEventListener("focus", () => {
+      renderCadetAutocomplete(cadetInput.value);
     });
 
-    cadetFilterInput.addEventListener("keydown", e => {
+    cadetInput.addEventListener("input", () => {
+      cadetIdInput.value = "";
+      renderCadetAutocomplete(cadetInput.value);
+    });
+
+    cadetInput.addEventListener("keydown", e => {
+      const items = cadetDropdown ? cadetDropdown.querySelectorAll(".autocomplete-item") : [];
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (!cadetDropdown || !cadetDropdown.classList.contains("active")) {
+          renderCadetAutocomplete(cadetInput.value);
+          return;
+        }
+        if (items.length > 0) {
+          cadetHighlightIndex = (cadetHighlightIndex + 1) % items.length;
+          updateCadetHighlight(items);
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (items.length > 0) {
+          cadetHighlightIndex = (cadetHighlightIndex - 1 + items.length) % items.length;
+          updateCadetHighlight(items);
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (cadetHighlightIndex >= 0 && items[cadetHighlightIndex]) {
+          const cid = Number(items[cadetHighlightIndex].dataset.id);
+          const c = state.cadets.find(x => x.id === cid);
+          if (c) selectCadet(c);
+        } else {
+          const available = getAvailableCadets(cadetInput.value);
+          if (available.length > 0) {
+            selectCadet(available[0]);
+          } else {
+            showToast("Курсант с такой фамилией не найден", "danger");
+          }
+        }
+      } else if (e.key === "Escape") {
+        if (cadetDropdown) cadetDropdown.classList.remove("active");
+      }
+    });
+
+    cadetInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (cadetDropdown) cadetDropdown.classList.remove("active");
+      }, 200);
+    });
+  }
+
+  // -------------------------------------------------------------
+  // АВТОПОДСТАНОВКА ПРИЧИНЫ ОТСУТСТВИЯ
+  // -------------------------------------------------------------
+  const reasonInput = document.getElementById("absenceReasonInput");
+  const reasonCategoryInput = document.getElementById("absenceReasonCategory");
+  const reasonDropdown = document.getElementById("reasonAutocompleteDropdown");
+  const categoryBox = document.getElementById("customReasonCategoryBox");
+  const categorySelect = document.getElementById("customReasonCategorySelect");
+
+  let reasonHighlightIndex = -1;
+
+  function renderReasonAutocomplete(query = "") {
+    if (!reasonDropdown) return;
+    const q = String(query || "").trim().toLowerCase();
+    reasonHighlightIndex = -1;
+
+    const matched = state.absenceTypes.filter(t => {
+      if (!q) return true;
+      return t.name.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+    });
+
+    let html = "";
+    matched.forEach((t, i) => {
+      html += `
+        <div class="autocomplete-item" data-id="${t.id}" data-name="${escapeHtml(t.name)}" data-category="${escapeHtml(t.category)}" data-index="${i}">
+          <div class="autocomplete-item-main"><strong>${escapeHtml(t.name)}</strong></div>
+          <span class="badge ${getCategoryBadgeClass(t.category)}">${escapeHtml(t.category)}</span>
+        </div>
+      `;
+    });
+
+    if (q && !state.absenceTypes.some(t => t.name.toLowerCase() === q)) {
+      const autoCat = detectReasonCategory(q);
+      html += `
+        <div class="autocomplete-item custom-reason-option" data-name="${escapeHtml(query.trim())}" data-category="${autoCat}" data-index="${matched.length}">
+          <div class="autocomplete-item-main" style="color: var(--primary);">
+            ✍️ Использовать «<strong>${escapeHtml(query.trim())}</strong>»
+          </div>
+          <span class="badge ${getCategoryBadgeClass(autoCat)}">${autoCat}</span>
+        </div>
+      `;
+    }
+
+    if (!html) {
+      html = `<div class="autocomplete-empty">Причины не найдены</div>`;
+    }
+
+    reasonDropdown.innerHTML = html;
+    reasonDropdown.classList.add("active");
+
+    reasonDropdown.querySelectorAll(".autocomplete-item").forEach(item => {
+      item.addEventListener("mousedown", e => {
+        e.preventDefault();
+        const rName = item.dataset.name;
+        const rCat = item.dataset.category || detectReasonCategory(rName);
+        selectReason(rName, rCat);
+      });
+    });
+  }
+
+  function selectReason(name, cat) {
+    if (!name) return;
+    reasonInput.value = name;
+    reasonCategoryInput.value = cat;
+    if (categorySelect) categorySelect.value = cat;
+
+    if (reasonDropdown) reasonDropdown.classList.remove("active");
+    reasonHighlightIndex = -1;
+
+    const isStandard = state.absenceTypes.some(t => t.name.toLowerCase() === name.toLowerCase());
+    if (categoryBox) {
+      categoryBox.style.display = isStandard ? "none" : "flex";
+    }
+
+    const noteInput = document.getElementById("absenceNoteInput");
+    if (noteInput) noteInput.focus();
+  }
+
+  function updateReasonHighlight(items) {
+    items.forEach((it, idx) => {
+      if (idx === reasonHighlightIndex) {
+        it.classList.add("selected");
+        it.scrollIntoView({ block: "nearest" });
+      } else {
+        it.classList.remove("selected");
+      }
+    });
+  }
+
+  if (reasonInput) {
+    reasonInput.addEventListener("focus", () => {
+      renderReasonAutocomplete(reasonInput.value);
+    });
+
+    reasonInput.addEventListener("input", () => {
+      const val = reasonInput.value.trim();
+      const detected = detectReasonCategory(val);
+      reasonCategoryInput.value = detected;
+      if (categorySelect) categorySelect.value = detected;
+
+      const isStandard = state.absenceTypes.some(t => t.name.toLowerCase() === val.toLowerCase());
+      if (categoryBox) {
+        categoryBox.style.display = (val && !isStandard) ? "flex" : "none";
+      }
+
+      renderReasonAutocomplete(reasonInput.value);
+    });
+
+    reasonInput.addEventListener("keydown", e => {
+      const items = reasonDropdown ? reasonDropdown.querySelectorAll(".autocomplete-item") : [];
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (!reasonDropdown || !reasonDropdown.classList.contains("active")) {
+          renderReasonAutocomplete(reasonInput.value);
+          return;
+        }
+        if (items.length > 0) {
+          reasonHighlightIndex = (reasonHighlightIndex + 1) % items.length;
+          updateReasonHighlight(items);
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (items.length > 0) {
+          reasonHighlightIndex = (reasonHighlightIndex - 1 + items.length) % items.length;
+          updateReasonHighlight(items);
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (reasonHighlightIndex >= 0 && items[reasonHighlightIndex]) {
+          const it = items[reasonHighlightIndex];
+          selectReason(it.dataset.name, it.dataset.category || detectReasonCategory(it.dataset.name));
+        } else {
+          const val = reasonInput.value.trim();
+          if (val) {
+            const matched = state.absenceTypes.find(t => t.name.toLowerCase() === val.toLowerCase());
+            if (matched) {
+              selectReason(matched.name, matched.category);
+            } else {
+              selectReason(val, detectReasonCategory(val));
+            }
+          }
+        }
+      } else if (e.key === "Escape") {
+        if (reasonDropdown) reasonDropdown.classList.remove("active");
+      }
+    });
+
+    reasonInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (reasonDropdown) reasonDropdown.classList.remove("active");
+      }, 200);
+    });
+  }
+
+  if (categorySelect) {
+    categorySelect.addEventListener("change", e => {
+      reasonCategoryInput.value = e.target.value;
+    });
+  }
+
+  // Примечание: нажатие Enter сразу инициирует добавление в расход
+  const noteInput = document.getElementById("absenceNoteInput");
+  if (noteInput) {
+    noteInput.addEventListener("keydown", e => {
       if (e.key === "Enter") {
         e.preventDefault();
-        const select = document.getElementById("absenceCadetSelect");
-        if (select && select.value) {
-          const reasonSelect = document.getElementById("absenceReasonSelect");
-          if (reasonSelect) reasonSelect.focus();
-        } else if (select && select.options.length > 1) {
-          select.selectedIndex = 1;
-          const selectedId = Number(select.value);
-          const cadet = state.cadets.find(c => c.id === selectedId);
-          if (cadet) {
-            cadetFilterInput.value = `${cadet.rank} ${cadet.short_fio} (${cadet.group_num} взв.)`;
-          }
-          const reasonSelect = document.getElementById("absenceReasonSelect");
-          if (reasonSelect) reasonSelect.focus();
-        }
+        const addBtn = document.getElementById("addAbsenceBtn");
+        if (addBtn) addBtn.click();
       }
     });
   }
 
-  if (cadetSelectEl) {
-    cadetSelectEl.addEventListener("change", () => {
-      const selectedId = Number(cadetSelectEl.value);
-      const cadet = state.cadets.find(c => c.id === selectedId);
-      if (cadet && cadetFilterInput) {
-        cadetFilterInput.value = `${cadet.rank} ${cadet.short_fio} (${cadet.group_num} взв.)`;
-      }
-    });
-  }
+  // Закрытие выпадающих списков при клике вне полей
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#absenceCadetInput") && !e.target.closest("#cadetAutocompleteDropdown")) {
+      if (cadetDropdown) cadetDropdown.classList.remove("active");
+    }
+    if (!e.target.closest("#absenceReasonInput") && !e.target.closest("#reasonAutocompleteDropdown")) {
+      if (reasonDropdown) reasonDropdown.classList.remove("active");
+    }
+  });
 
-  // Обработка переключения причины отсутствия
-  const reasonSelect = document.getElementById("absenceReasonSelect");
-  const customReasonFields = document.getElementById("customReasonFields");
-  if (reasonSelect && customReasonFields) {
-    reasonSelect.addEventListener("change", () => {
-      if (reasonSelect.value === "custom") {
-        customReasonFields.style.display = "flex";
-      } else {
-        customReasonFields.style.display = "none";
-      }
-    });
-  }
-
-  // Добавление в расход
+  // -------------------------------------------------------------
+  // ДОБАВЛЕНИЕ В РАСХОД
+  // -------------------------------------------------------------
   const addAbsenceBtn = document.getElementById("addAbsenceBtn");
   if (addAbsenceBtn) {
     addAbsenceBtn.addEventListener("click", () => {
-      const cadetSelect = document.getElementById("absenceCadetSelect");
-      const filterInput = document.getElementById("cadetFilterInput");
-      let cadetId = Number(cadetSelect ? cadetSelect.value : 0);
+      let cadetId = Number(cadetIdInput ? cadetIdInput.value : 0);
 
-      // Если в select не выбрано, но пользователь ввел текст в поле фильтра:
-      if (!cadetId && filterInput && filterInput.value.trim()) {
-        const query = filterInput.value.trim().toLowerCase();
-        const absentCadetIds = new Set(state.absences.map(a => a.cadet_id));
-        const matched = state.cadets.filter(c => {
-          if (absentCadetIds.has(c.id)) return false;
-          const fio = String(c.fio || "").toLowerCase();
-          const shortFio = String(c.short_fio || "").toLowerCase();
-          const rank = String(c.rank || "").toLowerCase();
-          const grp = String(c.group_num || "").toLowerCase();
-          return fio.includes(query) || shortFio.includes(query) || rank.includes(query) || grp.includes(query);
-        });
-        if (matched.length > 0) {
-          cadetId = matched[0].id;
-          if (cadetSelect) cadetSelect.value = cadetId;
+      // Если cadetId не выставлен, пробуем найти по введенному тексту
+      if (!cadetId && cadetInput && cadetInput.value.trim()) {
+        const available = getAvailableCadets(cadetInput.value);
+        if (available.length > 0) {
+          cadetId = available[0].id;
         }
       }
 
       if (!cadetId) {
-        showToast("Выберите курсанта из списка!", "danger");
+        showToast("Введите фамилию курсанта!", "danger");
+        if (cadetInput) cadetInput.focus();
         return;
       }
 
       const cadet = state.cadets.find(c => c.id === cadetId);
-      if (!cadet) return;
+      if (!cadet) {
+        showToast("Курсант не найден в базе!", "danger");
+        return;
+      }
 
       if (state.absences.some(a => a.cadet_id === cadetId)) {
         showToast("Этот курсант уже добавлен в расход!", "danger");
         return;
       }
 
-      const reasonSelect = document.getElementById("absenceReasonSelect");
-      let typeName = "";
-      let category = "Наряд";
-
-      if (reasonSelect.value === "custom") {
-        typeName = document.getElementById("customReasonName").value.trim();
-        category = document.getElementById("customReasonCategory").value.trim() || "Наряд";
-        if (!typeName) {
-          showToast("Введите название причины отсутствия!", "danger");
-          return;
-        }
-      } else {
-        const typeId = Number(reasonSelect.value);
-        const reasonObj = state.absenceTypes.find(t => t.id === typeId);
-        if (!reasonObj) {
-          showToast("Выберите причину отсутствия!", "danger");
-          return;
-        }
-        typeName = reasonObj.name;
-        category = reasonObj.category;
+      const typeName = reasonInput ? reasonInput.value.trim() : "";
+      if (!typeName) {
+        showToast("Введите или выберите причину отсутствия!", "danger");
+        if (reasonInput) reasonInput.focus();
+        return;
       }
 
-      const note = document.getElementById("absenceNoteInput").value.trim();
+      const category = (categorySelect && categoryBox && categoryBox.style.display !== "none")
+        ? categorySelect.value
+        : (reasonCategoryInput.value || detectReasonCategory(typeName));
+
+      // Если введена новая причина, сохраняем в справочник типов
+      if (!state.absenceTypes.some(t => t.name.toLowerCase() === typeName.toLowerCase())) {
+        state.absenceTypes.push({
+          id: nextTypeId++,
+          name: typeName,
+          code: typeName.slice(0, 2).toUpperCase(),
+          category: category
+        });
+        renderReasonsTable();
+      }
+
+      const note = noteInput ? noteInput.value.trim() : "";
 
       state.absences.push({
         id: nextAbsenceId++,
@@ -1510,20 +1769,23 @@ document.addEventListener("DOMContentLoaded", () => {
         note: note
       });
 
-      // Очистка формы
-      cadetSelect.value = "";
-      if (cadetFilterInput) cadetFilterInput.value = "";
-      document.getElementById("absenceNoteInput").value = "";
-      if (reasonSelect.value === "custom") {
-        document.getElementById("customReasonName").value = "";
-      }
+      // Очистка полей формы
+      cadetInput.value = "";
+      cadetIdInput.value = "";
+      reasonInput.value = "";
+      reasonCategoryInput.value = "Наряд";
+      if (categoryBox) categoryBox.style.display = "none";
+      if (noteInput) noteInput.value = "";
 
       updateKpi();
       renderAbsencesTable();
       updateCadetSelectOptions();
       renderLivePreview();
 
-      showToast(`Курсант ${cadet.short_fio} добавлен в расход`, "success");
+      showToast(`Курсант ${cadet.short_fio} добавлен в расход (${typeName})`, "success");
+
+      // Возврат фокуса на ввод фамилии для быстрого добавления следующего курсанта
+      if (cadetInput) cadetInput.focus();
     });
   }
 

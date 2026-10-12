@@ -574,6 +574,8 @@ class MainWindow(QMainWindow):
         if self.cb_cadets.completer():
             self.cb_cadets.completer().setFilterMode(Qt.MatchContains)
         self.cb_cadets.setPlaceholderText("Выберите курсанта...")
+        if self.cb_cadets.lineEdit():
+            self.cb_cadets.lineEdit().returnPressed.connect(self.on_cadet_return_pressed)
         add_layout.addWidget(self.cb_cadets, 4)
 
         self.cb_types = QComboBox()
@@ -582,6 +584,8 @@ class MainWindow(QMainWindow):
         if self.cb_types.completer():
             self.cb_types.completer().setFilterMode(Qt.MatchContains)
         self.cb_types.setPlaceholderText("Причина (наряд, увольнение...)...")
+        if self.cb_types.lineEdit():
+            self.cb_types.lineEdit().returnPressed.connect(self.on_type_return_pressed)
         add_layout.addWidget(self.cb_types, 3)
 
         self.edit_note = QLineEdit()
@@ -842,6 +846,24 @@ class MainWindow(QMainWindow):
             btn_del.clicked.connect(lambda _, aid=abs_id: self.delete_absence(aid))
             self.table_absences.setCellWidget(r, 6, btn_del)
 
+    def on_cadet_return_pressed(self):
+        text = self.cb_cadets.currentText().strip().lower()
+        if text:
+            for i in range(self.cb_cadets.count()):
+                if text in self.cb_cadets.itemText(i).lower():
+                    self.cb_cadets.setCurrentIndex(i)
+                    break
+        self.cb_types.setFocus()
+
+    def on_type_return_pressed(self):
+        text = self.cb_types.currentText().strip().lower()
+        if text:
+            for i in range(self.cb_types.count()):
+                if text in self.cb_types.itemText(i).lower():
+                    self.cb_types.setCurrentIndex(i)
+                    break
+        self.edit_note.setFocus()
+
     def add_absence_record(self):
         cadet_id = self.cb_cadets.currentData()
         type_id = self.cb_types.currentData()
@@ -864,14 +886,33 @@ class MainWindow(QMainWindow):
                         type_id = self.cb_types.itemData(i)
                         break
 
+        # Если введена новая причина отсутствия, которой еще нет в списке
+        if not type_id and self.cb_types.currentText().strip():
+            raw_text = self.cb_types.currentText().strip()
+            low = raw_text.lower()
+            cat = "Наряд"
+            if "увольн" in low or "отпуск" in low:
+                cat = "Увольнение"
+            elif "госпитал" in low:
+                cat = "Госпиталь"
+            elif "лазарет" in low or "больнич" in low or "медпункт" in low:
+                cat = "Лазарет"
+            elif "командир" in low:
+                cat = "Командировка"
+            elif "похорон" in low:
+                cat = "Похороны"
+            type_id = self.db.add_absence_type(raw_text, raw_text[:2].upper(), cat)
+            self.load_absence_types()
+
         if not cadet_id or not type_id:
-            QMessageBox.warning(self, "Внимание", "Пожалуйста, выберите курсанта и причину отсутствия.")
+            QMessageBox.warning(self, "Внимание", "Пожалуйста, введите фамилию курсанта и причину отсутствия.")
             return
 
         d_str = self.get_selected_date_str()
         self.db.set_absence(d_str, cadet_id, type_id, note)
         self.edit_note.clear()
         self.load_daily_data()
+        self.cb_cadets.setFocus()
 
     def delete_absence(self, abs_id):
         self.db.remove_absence(abs_id)

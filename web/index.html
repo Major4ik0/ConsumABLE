@@ -210,18 +210,21 @@
 
         <div class="grid-3" style="margin-bottom: 14px;">
           <div class="form-group">
-            <label class="form-label" for="absenceCadetSelect">Курсант (поиск и выбор)</label>
-            <input type="text" id="cadetFilterInput" class="form-input" placeholder="Быстрый фильтр по фамилии..." style="margin-bottom: 6px;">
-            <select id="absenceCadetSelect" class="form-select">
-              <option value="">-- Выберите курсанта --</option>
-            </select>
+            <label class="form-label" for="absenceCadetInput">Курсант (введите фамилию)</label>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="absenceCadetInput" class="form-input" placeholder="Начните вводить фамилию (например: Пиков)..." autocomplete="off">
+              <input type="hidden" id="absenceCadetId" value="">
+              <div id="cadetAutocompleteDropdown" class="autocomplete-dropdown"></div>
+            </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="absenceReasonSelect">Причина отсутствия</label>
-            <select id="absenceReasonSelect" class="form-select">
-              <option value="">-- Выберите причину --</option>
-            </select>
+            <label class="form-label" for="absenceReasonInput">Причина отсутствия (введите или выберите)</label>
+            <div class="autocomplete-wrapper">
+              <input type="text" id="absenceReasonInput" class="form-input" placeholder="Например: Увольнение, Дежурный..." autocomplete="off">
+              <input type="hidden" id="absenceReasonCategory" value="Наряд">
+              <div id="reasonAutocompleteDropdown" class="autocomplete-dropdown"></div>
+            </div>
           </div>
 
           <div class="form-group">
@@ -230,23 +233,18 @@
           </div>
         </div>
 
-        <!-- Дополнительные поля для своей причины -->
-        <div id="customReasonFields" class="grid-2" style="display: none; margin-bottom: 14px; background: var(--bg-subtle); padding: 12px; border-radius: var(--radius-sm);">
-          <div class="form-group">
-            <label class="form-label" for="customReasonName">Название своей причины</label>
-            <input type="text" id="customReasonName" class="form-input" placeholder="Например: Дежурный по парку">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="customReasonCategory">Категория в сводке</label>
-            <select id="customReasonCategory" class="form-select">
-              <option value="Наряд">Наряд</option>
-              <option value="Увольнение">Увольнение</option>
-              <option value="Госпиталь">Госпиталь</option>
-              <option value="Лазарет">Лазарет</option>
-              <option value="Командировка">Командировка</option>
-              <option value="Похороны">Похороны</option>
-            </select>
-          </div>
+        <!-- Дополнительное поле категории для новой причины -->
+        <div id="customReasonCategoryBox" style="display: none; margin-bottom: 14px; background: var(--bg-subtle); padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); align-items: center; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-main);">Категория для новой причины:</span>
+          <select id="customReasonCategorySelect" class="form-select" style="width: auto; min-width: 170px;">
+            <option value="Наряд">Наряд</option>
+            <option value="Увольнение">Увольнение</option>
+            <option value="Госпиталь">Госпиталь</option>
+            <option value="Лазарет">Лазарет</option>
+            <option value="Командировка">Командировка</option>
+            <option value="Похороны">Похороны</option>
+          </select>
+          <span id="detectedCategoryHint" style="font-size: 12px; color: var(--text-muted);">(категория определена автоматически)</span>
         </div>
 
         <button id="addAbsenceBtn" class="btn btn-primary">
