@@ -1,3 +1,3 @@
-PyQt5>=5.15.9
-openpyxl>=3.1.2
-Pillow>=9.0.0
+PyQt5>=5.15.2
+openpyxl>=3.0.0
+Pillow>=8.0.0
