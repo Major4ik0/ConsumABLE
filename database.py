@@ -1,8 +1,10 @@
 import sqlite3
+from typing import List, Dict, Any, Optional
+from core.models import normalize_gender, gender_to_ru
 
 class Database:
     def __init__(self, db_path="app_data.db"):
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.create_tables()
 
@@ -23,7 +25,9 @@ class Database:
                     fio TEXT NOT NULL,
                     short_fio TEXT,
                     group_num TEXT NOT NULL,
+                    course INTEGER DEFAULT 1,
                     gender TEXT DEFAULT 'М',
+                    status TEXT DEFAULT 'active',
                     sort_order INTEGER DEFAULT 0,
                     is_active INTEGER DEFAULT 1
                 )
@@ -50,6 +54,16 @@ class Database:
                     UNIQUE(report_date, cadet_id)
                 )
             """)
+
+            # Migration checks for columns in existing databases
+            cur = self.conn.cursor()
+            cur.execute("PRAGMA table_info(cadets)")
+            existing_cols = [r[1] for r in cur.fetchall()]
+            if "course" not in existing_cols:
+                self.conn.execute("ALTER TABLE cadets ADD COLUMN course INTEGER DEFAULT 1")
+            if "status" not in existing_cols:
+                self.conn.execute("ALTER TABLE cadets ADD COLUMN status TEXT DEFAULT 'active'")
+
             self._seed_defaults()
             self._ensure_default_types()
 
@@ -81,7 +95,6 @@ class Database:
             )
 
     def _ensure_default_types(self):
-        # Исправление опечатки и добавление Увольнения в существующие БД
         with self.conn:
             self.conn.execute("""
                 UPDATE absence_types 
@@ -106,20 +119,32 @@ class Database:
         with self.conn:
             self.conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", (key, value))
 
-    def get_all_cadets(self):
+    def get_all_cadets(self, active_only: bool = True):
         cur = self.conn.cursor()
-        cur.execute("""
-            SELECT id, rank, fio, short_fio, group_num, gender, sort_order 
-            FROM cadets 
-            WHERE is_active = 1 
-            ORDER BY sort_order ASC, group_num ASC, fio ASC
-        """)
+        if active_only:
+            cur.execute("""
+                SELECT id, rank, fio, short_fio, group_num, course, gender, status, sort_order 
+                FROM cadets 
+                WHERE is_active = 1 AND (status IS NULL OR status = 'active')
+                ORDER BY sort_order ASC, group_num ASC, fio ASC
+            """)
+        else:
+            cur.execute("""
+                SELECT id, rank, fio, short_fio, group_num, course, gender, status, sort_order 
+                FROM cadets 
+                ORDER BY sort_order ASC, group_num ASC, fio ASC
+            """)
         return [dict(r) for r in cur.fetchall()]
+
+    def get_cadets_by_gender(self, gender_val: str, active_only: bool = True):
+        all_cadets = self.get_all_cadets(active_only=active_only)
+        target = normalize_gender(gender_val)
+        return [c for c in all_cadets if normalize_gender(c.get('gender')) == target]
 
     def get_cadet_by_id(self, cadet_id):
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT id, rank, fio, short_fio, group_num, gender, sort_order 
+            SELECT id, rank, fio, short_fio, group_num, course, gender, status, sort_order 
             FROM cadets 
             WHERE id = ?
         """, (cadet_id,))
@@ -131,14 +156,14 @@ class Database:
         cur.execute("""
             SELECT DISTINCT group_num 
             FROM cadets 
-            WHERE is_active = 1 
+            WHERE is_active = 1 AND (status IS NULL OR status = 'active')
             ORDER BY sort_order ASC, group_num ASC
         """)
         return [r[0] for r in cur.fetchall()]
 
-    def add_cadet(self, rank, fio, group_num, gender="М", short_fio=None):
+    def add_cadet(self, rank, fio, group_num, gender="М", short_fio=None, course=1, status="active"):
         if not short_fio:
-            from excel_manager import make_short_fio
+            from core.parsers import make_short_fio
             short_fio = make_short_fio(fio)
         cur = self.conn.cursor()
         cur.execute("SELECT sort_order FROM cadets WHERE group_num = ? LIMIT 1", (group_num,))
@@ -149,23 +174,26 @@ class Database:
             cur.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM cadets")
             sort_order = cur.fetchone()[0]
 
+        ru_gender = gender_to_ru(gender)
+
         with self.conn:
             cur = self.conn.execute("""
-                INSERT INTO cadets (rank, fio, short_fio, group_num, gender, sort_order, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, 1)
-            """, (rank, fio, short_fio, group_num, gender, sort_order))
+                INSERT INTO cadets (rank, fio, short_fio, group_num, course, gender, status, sort_order, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (rank, fio, short_fio, group_num, course, ru_gender, status, sort_order))
             return cur.lastrowid
 
-    def update_cadet(self, cadet_id, rank, fio, group_num, gender="М", short_fio=None):
+    def update_cadet(self, cadet_id, rank, fio, group_num, gender="М", short_fio=None, course=1, status="active"):
         if not short_fio:
-            from excel_manager import make_short_fio
+            from core.parsers import make_short_fio
             short_fio = make_short_fio(fio)
+        ru_gender = gender_to_ru(gender)
         with self.conn:
             self.conn.execute("""
                 UPDATE cadets 
-                SET rank = ?, fio = ?, short_fio = ?, group_num = ?, gender = ?
+                SET rank = ?, fio = ?, short_fio = ?, group_num = ?, course = ?, gender = ?, status = ?
                 WHERE id = ?
-            """, (rank, fio, short_fio, group_num, gender, cadet_id))
+            """, (rank, fio, short_fio, group_num, course, ru_gender, status, cadet_id))
 
     def delete_cadet(self, cadet_id):
         with self.conn:
@@ -179,18 +207,58 @@ class Database:
             prepared = []
             for idx, c in enumerate(cadets_list):
                 if isinstance(c, dict):
+                    rank = c.get('rank', 'курсант')
+                    fio = c['fio']
+                    short_fio = c.get('short_fio', '')
+                    group_num = c['group_num']
+                    course = c.get('course', 1)
+                    gender = gender_to_ru(c.get('gender', 'М'))
+                    status = c.get('status', 'active')
+                    sort_order = c.get('sort_order', idx)
+                    prepared.append((rank, fio, short_fio, group_num, course, gender, status, sort_order))
+                elif hasattr(c, 'fio'):
+                    # Pydantic or DTO object
                     prepared.append((
-                        c.get('rank', ''), c['fio'], c.get('short_fio', ''), 
-                        c['group_num'], c.get('gender', 'М'), c.get('sort_order', idx)
+                        c.rank, c.fio, c.short_fio, c.group_num, getattr(c, 'course', 1),
+                        gender_to_ru(c.gender), getattr(c, 'status', 'active'), getattr(c, 'sort_order', idx)
                     ))
                 else:
                     sort_order = c[5] if len(c) > 5 else idx
-                    prepared.append((c[0], c[1], c[2], c[3], c[4], sort_order))
+                    course = c[6] if len(c) > 6 else 1
+                    status = c[7] if len(c) > 7 else 'active'
+                    prepared.append((c[0], c[1], c[2], c[3], course, gender_to_ru(c[4]), status, sort_order))
 
             self.conn.executemany(
-                "INSERT INTO cadets (rank, fio, short_fio, group_num, gender, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO cadets (rank, fio, short_fio, group_num, course, gender, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 prepared
             )
+
+    def bulk_increment_course(self, max_course: int = 5):
+        with self.conn:
+            self.conn.execute("""
+                UPDATE cadets
+                SET status = 'graduated'
+                WHERE is_active = 1 AND status = 'active' AND course >= ?
+            """, (max_course,))
+            self.conn.execute("""
+                UPDATE cadets
+                SET course = course + 1
+                WHERE is_active = 1 AND status = 'active'
+            """)
+
+    def bulk_set_course(self, course: int, cadet_ids: Optional[List[int]] = None):
+        with self.conn:
+            if cadet_ids:
+                q_marks = ",".join("?" for _ in cadet_ids)
+                self.conn.execute(
+                    f"UPDATE cadets SET course = ?, status = 'active' WHERE id IN ({q_marks})",
+                    [course] + cadet_ids
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE cadets SET course = ?, status = 'active' WHERE is_active = 1",
+                    (course,)
+                )
 
     def get_absence_types(self):
         cur = self.conn.cursor()
@@ -240,10 +308,11 @@ class Database:
 
     def add_absence_type(self, name, code, category):
         with self.conn:
-            self.conn.execute(
+            cur = self.conn.execute(
                 "INSERT INTO absence_types (name, code, category) VALUES (?, ?, ?)",
                 (name, code, category)
             )
+            return cur.lastrowid
 
     def update_absence_type(self, type_id, name, code, category):
         with self.conn:
@@ -257,10 +326,10 @@ class Database:
         with self.conn:
             self.conn.execute("DELETE FROM absence_types WHERE id = ?", (type_id,))
 
-    def get_absences_for_date(self, target_date):
+    def get_absences_for_date(self, target_date, gender_filter: Optional[str] = None):
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT da.id, c.id AS cadet_id, c.rank, c.short_fio, c.fio, c.group_num, c.gender, 
+            SELECT da.id, c.id AS cadet_id, c.rank, c.short_fio, c.fio, c.group_num, c.course, c.gender, c.status,
                    t.id AS type_id, t.name AS type_name, t.code AS type_code, t.category, da.note
             FROM daily_absences da
             JOIN cadets c ON da.cadet_id = c.id
@@ -268,7 +337,11 @@ class Database:
             WHERE da.report_date = ?
             ORDER BY c.sort_order ASC, c.group_num ASC, c.fio ASC
         """, (target_date,))
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+        if gender_filter:
+            norm_target = normalize_gender(gender_filter)
+            return [r for r in rows if normalize_gender(r.get('gender')) == norm_target]
+        return rows
 
     def set_absence(self, target_date, cadet_id, type_id, note=""):
         with self.conn:

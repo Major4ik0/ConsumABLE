@@ -25,7 +25,9 @@ const state = {
     { id: 7, name: "Командировка", code: "К", category: "Командировка" },
     { id: 8, name: "Мог", code: "Н", category: "Наряд" }
   ],
-  standardCategories: ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны", "Увольнение"]
+  standardCategories: ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны", "Увольнение"],
+  currentSlice: "total",
+  stagingCadets: []
 };
 
 let nextCadetId = 1;
@@ -658,9 +660,44 @@ async function generateExcelReport() {
 
 // 5. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ И РЕНДЕРИНГ
 
+function switchSliceTab(slice) {
+  state.currentSlice = slice;
+  document.querySelectorAll(".slice-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.slice === slice);
+  });
+  updateKpi();
+  renderAbsencesTable();
+}
+
 function updateKpi() {
-  const total = state.cadets.length;
-  const absent = state.absences.length;
+  const allCadets = state.cadets;
+  const allAbsences = state.absences;
+
+  const maleCadets = allCadets.filter(c => c.gender === 'М' || c.gender === 'male');
+  const femaleCadets = allCadets.filter(c => c.gender === 'Ж' || c.gender === 'female');
+
+  const maleAbsences = allAbsences.filter(a => a.gender === 'М' || a.gender === 'male');
+  const femaleAbsences = allAbsences.filter(a => a.gender === 'Ж' || a.gender === 'female');
+
+  const totalTabCount = document.getElementById("sliceTotalCount");
+  const maleTabCount = document.getElementById("sliceMaleCount");
+  const femaleTabCount = document.getElementById("sliceFemaleCount");
+  if (totalTabCount) totalTabCount.textContent = allCadets.length;
+  if (maleTabCount) maleTabCount.textContent = maleCadets.length;
+  if (femaleTabCount) femaleTabCount.textContent = femaleCadets.length;
+
+  let currentCadets = allCadets;
+  let currentAbsences = allAbsences;
+  if (state.currentSlice === 'male') {
+    currentCadets = maleCadets;
+    currentAbsences = maleAbsences;
+  } else if (state.currentSlice === 'female') {
+    currentCadets = femaleCadets;
+    currentAbsences = femaleAbsences;
+  }
+
+  const total = currentCadets.length;
+  const absent = currentAbsences.length;
   const present = Math.max(0, total - absent);
 
   const kpiTotalEl = document.getElementById("kpiTotal");
@@ -670,6 +707,20 @@ function updateKpi() {
   if (kpiTotalEl) kpiTotalEl.textContent = `${total} чел.`;
   if (kpiPresentEl) kpiPresentEl.textContent = `${present} чел.`;
   if (kpiAbsentEl) kpiAbsentEl.textContent = `${absent} чел.`;
+
+  // Контроль сквозного математического баланса
+  const balanceBanner = document.getElementById("sliceBalanceBanner");
+  if (balanceBanner) {
+    const isSumBalanced = (allCadets.length === (maleCadets.length + femaleCadets.length)) &&
+                          (allAbsences.length === (maleAbsences.length + femaleAbsences.length));
+    if (isSumBalanced) {
+      balanceBanner.className = "slice-balance-banner";
+      balanceBanner.innerHTML = `⚖️ <strong>Сквозной баланс строя подтвержден:</strong> Общий [П/С: ${allCadets.length}, В строю: ${Math.max(0, allCadets.length - allAbsences.length)}, Расход: ${allAbsences.length}] = Мужчины (${maleCadets.length}/${Math.max(0, maleCadets.length - maleAbsences.length)}/${maleAbsences.length}) + Женщины (${femaleCadets.length}/${Math.max(0, femaleCadets.length - femaleAbsences.length)}/${femaleAbsences.length}) ✓`;
+    } else {
+      balanceBanner.className = "slice-balance-banner error";
+      balanceBanner.innerHTML = `❌ <strong>Нарушение баланса:</strong> Сумма мужского и женского состава не сходится с общим!`;
+    }
+  }
 }
 
 function getAvailableCadets(query = "") {
@@ -725,11 +776,18 @@ function renderAbsencesTable() {
 
   if (!tbody) return;
 
-  if (badgeCount) {
-    badgeCount.textContent = `${state.absences.length} чел.`;
+  let displayedAbsences = state.absences;
+  if (state.currentSlice === 'male') {
+    displayedAbsences = state.absences.filter(a => a.gender === 'М' || a.gender === 'male');
+  } else if (state.currentSlice === 'female') {
+    displayedAbsences = state.absences.filter(a => a.gender === 'Ж' || a.gender === 'female');
   }
 
-  if (state.absences.length === 0) {
+  if (badgeCount) {
+    badgeCount.textContent = `${displayedAbsences.length} чел.`;
+  }
+
+  if (displayedAbsences.length === 0) {
     if (table) table.style.display = "none";
     if (emptyState) emptyState.style.display = "block";
     tbody.innerHTML = "";
@@ -741,7 +799,7 @@ function renderAbsencesTable() {
 
   tbody.innerHTML = "";
 
-  state.absences.forEach((a, idx) => {
+  displayedAbsences.forEach((a, idx) => {
     const tr = document.createElement("tr");
 
     let catBadgeClass = "badge-blue";
@@ -766,6 +824,168 @@ function renderAbsencesTable() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+// -------------------------------------------------------------
+// STAGING WIZARD ДЛЯ WEB-ВЕРСИИ
+// -------------------------------------------------------------
+
+function openWizardModal(stagingCadets) {
+  state.stagingCadets = stagingCadets.map((c, i) => ({
+    tempId: 't_' + (i + 1),
+    course: c.course || 1,
+    status: (c.course > 5) ? 'graduated' : 'active',
+    ...c
+  }));
+  renderWizardTable();
+  const modal = document.getElementById("stagingWizardModal");
+  if (modal) modal.classList.add("active");
+}
+
+function closeWizardModal() {
+  const modal = document.getElementById("stagingWizardModal");
+  if (modal) modal.classList.remove("active");
+}
+
+function renderWizardTable() {
+  const tbody = document.getElementById("wizardTableBody");
+  const badge = document.getElementById("wizardSummaryBadge");
+  if (!tbody) return;
+
+  const total = state.stagingCadets.length;
+  const graduated = state.stagingCadets.filter(c => c.status === 'graduated' || c.course > 5).length;
+  const males = state.stagingCadets.filter(c => c.gender === 'М' || c.gender === 'male').length;
+  const females = state.stagingCadets.filter(c => c.gender === 'Ж' || c.gender === 'female').length;
+
+  if (badge) {
+    badge.textContent = `Всего: ${total} чел. | 👨 М: ${males} | 👩 Ж: ${females}` + (graduated ? ` | ⚠️ Выпускники: ${graduated}` : '');
+  }
+
+  tbody.innerHTML = "";
+  state.stagingCadets.forEach((c, idx) => {
+    const tr = document.createElement("tr");
+    const isGraduated = c.status === 'graduated' || c.course > 5;
+    const isFemale = c.gender === 'Ж' || c.gender === 'female';
+    if (isGraduated) tr.style.backgroundColor = '#FFFBEB';
+
+    tr.innerHTML = `
+      <td style="text-align: center; color: var(--text-muted);">${idx + 1}</td>
+      <td>${escapeHtml(c.rank || "курсант")}</td>
+      <td><strong>${escapeHtml(c.fio)}</strong></td>
+      <td style="text-align: center;"><span class="badge badge-gray">${escapeHtml(c.group_num)}</span></td>
+      <td style="text-align: center;">
+        <select class="form-select" style="padding: 2px 6px; font-size: 12px; width: auto;" onchange="wizardChangeCourse('${c.tempId}', this.value)">
+          ${[1, 2, 3, 4, 5, 6].map(cr => `<option value="${cr}" ${c.course == cr ? 'selected' : ''}>${cr} курс</option>`).join('')}
+        </select>
+      </td>
+      <td style="text-align: center;">
+        <button class="btn btn-sm" style="padding: 2px 8px; font-weight: 700; ${isFemale ? 'background: #FDF2F8; color: #BE185D; border: 1px solid #FBCFE8;' : 'background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;'}" onclick="wizardToggleGender('${c.tempId}')">
+          ${isFemale ? '👩 Ж' : '👨 М'}
+        </button>
+      </td>
+      <td style="text-align: center;">
+        <span class="badge ${isGraduated ? 'badge-yellow' : 'badge-green'}">${isGraduated ? 'Выпускник' : 'В строю'}</span>
+      </td>
+      <td>
+        ${isGraduated ? '<span style="color: #DC2626; font-size: 11px; font-weight: 600;">⚠️ Курс > 5 (выпускник)</span>' : '<span style="color: #16A34A; font-size: 11px;">✓ Норма</span>'}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function wizardIncrementCourseAll() {
+  state.stagingCadets = state.stagingCadets.map(c => {
+    if (c.status === 'active' || !c.status) {
+      const nextCourse = Number(c.course || 1) + 1;
+      return {
+        ...c,
+        course: nextCourse,
+        status: nextCourse > 5 ? 'graduated' : 'active'
+      };
+    }
+    return c;
+  });
+  renderWizardTable();
+  showToast("Курс всех активных курсантов увеличен на +1", "info");
+}
+
+function wizardBulkSetCourse() {
+  const sel = document.getElementById("wizardBulkCourseSelect");
+  const targetCourse = Number(sel ? sel.value : 1);
+  state.stagingCadets = state.stagingCadets.map(c => ({
+    ...c,
+    course: targetCourse,
+    status: targetCourse > 5 ? 'graduated' : 'active'
+  }));
+  renderWizardTable();
+  showToast(`Курс ${targetCourse} назначен всем курсантам`, "info");
+}
+
+function wizardRemoveGraduates() {
+  const countBefore = state.stagingCadets.length;
+  state.stagingCadets = state.stagingCadets.filter(c => c.status !== 'graduated' && c.course <= 5);
+  renderWizardTable();
+  showToast(`Исключено выпускников: ${countBefore - state.stagingCadets.length} чел.`, "info");
+}
+
+function wizardToggleGender(tempId) {
+  state.stagingCadets = state.stagingCadets.map(c => {
+    if (c.tempId === tempId) {
+      const newGender = (c.gender === 'Ж' || c.gender === 'female') ? 'М' : 'Ж';
+      return { ...c, gender: newGender };
+    }
+    return c;
+  });
+  renderWizardTable();
+}
+
+function wizardChangeCourse(tempId, val) {
+  const num = Number(val);
+  state.stagingCadets = state.stagingCadets.map(c => {
+    if (c.tempId === tempId) {
+      return {
+        ...c,
+        course: num,
+        status: num > 5 ? 'graduated' : 'active'
+      };
+    }
+    return c;
+  });
+  renderWizardTable();
+}
+
+function confirmWizardImport() {
+  const graduates = state.stagingCadets.filter(c => c.status === 'graduated' || c.course > 5);
+  if (graduates.length > 0) {
+    if (confirm(`В списке обнаружено ${graduates.length} выпускников (курс > 5). Исключить их перед внесением в расход?`)) {
+      state.stagingCadets = state.stagingCadets.filter(c => c.status !== 'graduated' && c.course <= 5);
+    }
+  }
+
+  state.cadets = state.stagingCadets.map((c, idx) => ({
+    id: nextCadetId++,
+    rank: c.rank || "курсант",
+    fio: c.fio,
+    short_fio: c.short_fio || makeShortFio(c.fio),
+    group_num: c.group_num,
+    course: c.course || 1,
+    gender: (c.gender === 'female' || c.gender === 'Ж') ? 'Ж' : 'М',
+    status: c.status || 'active',
+    sort_order: idx
+  }));
+
+  state.absences = [];
+  closeWizardModal();
+
+  updateKpi();
+  updateCadetGroupFilterOptions();
+  renderCadetsTable();
+  updateCadetSelectOptions();
+  renderAbsencesTable();
+  renderLivePreview();
+
+  showToast(`Успешно загружено курсантов: ${state.cadets.length} чел.`, "success");
 }
 
 function removeAbsence(absenceId) {
@@ -1367,17 +1587,8 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        state.cadets = loadedCadets;
-        state.absences = []; // Сброс расхода при новой загрузке базы
-
-        updateKpi();
-        updateCadetGroupFilterOptions();
-        renderCadetsTable();
-        updateCadetSelectOptions();
-        renderAbsencesTable();
-        renderLivePreview();
-
-        showToast(`Успешно загружено курсантов: ${loadedCadets.length} чел.`, "success");
+        // Открываем интерактивный предпросмотр (Staging Wizard)
+        openWizardModal(loadedCadets);
       } catch (err) {
         console.error(err);
         showToast("Ошибка при чтении Excel-файла: " + err.message, "danger");

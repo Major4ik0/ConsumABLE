@@ -64,9 +64,9 @@ jobs:
         shell: cmd
         run: |
           if exist icon.ico (
-            pyinstaller --noconsole --onefile --clean --icon=icon.ico --hidden-import=PyQt5.QtSvg --add-data "icon.png;." --name "ConsumABLE-${{ matrix.arch }}" main.py
+            pyinstaller --noconsole --onefile --clean --icon=icon.ico --hidden-import=PyQt5.QtSvg --hidden-import=pydantic --hidden-import=pydantic_core --add-data "icon.png;." --name "ConsumABLE-${{ matrix.arch }}" main.py
           ) else (
-            pyinstaller --noconsole --onefile --clean --hidden-import=PyQt5.QtSvg --name "ConsumABLE-${{ matrix.arch }}" main.py
+            pyinstaller --noconsole --onefile --clean --hidden-import=PyQt5.QtSvg --hidden-import=pydantic --hidden-import=pydantic_core --name "ConsumABLE-${{ matrix.arch }}" main.py
           )
 
       - name: Upload Artifact
