@@ -23,7 +23,7 @@ const state = {
     { id: 5, name: "Госпиталь", code: "Г", category: "Госпиталь" },
     { id: 6, name: "Лазарет", code: "Л", category: "Лазарет" },
     { id: 7, name: "Командировка", code: "К", category: "Командировка" },
-    { id: 8, name: "Мог", code: "Н", category: "Наряд" }
+    { id: 8, name: "МОГ", code: "Н", category: "Наряд" }
   ],
   standardCategories: ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны", "Увольнение"],
   currentSlice: "total",
