@@ -2,7 +2,7 @@ from typing import List, Optional
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableView, QToolBar,
     QPushButton, QLabel, QComboBox, QSpinBox, QMessageBox,
-    QStyledItemDelegate, QHeaderView, QWidget, QFrame
+    QStyledItemDelegate, QHeaderView, QWidget, QFrame, QListView
 )
 from PyQt5.QtCore import Qt, QAbstractTableModel, QModelIndex, QVariant
 from PyQt5.QtGui import QColor, QBrush, QFont
@@ -12,7 +12,19 @@ from core.parsers import (
     increment_course_all,
     bulk_set_course,
     remove_graduates,
-    toggle_gender
+    toggle_gender,
+    change_group_course
+)
+from ui.icons import (
+    SVG_FAST_FORWARD,
+    SVG_GRADUATE,
+    SVG_USERS,
+    SVG_MALE,
+    SVG_FEMALE,
+    SVG_CHECK,
+    SVG_CROSS,
+    SVG_INFO,
+    create_svg_icon
 )
 
 
@@ -40,8 +52,21 @@ class CourseDelegate(QStyledItemDelegate):
 class GenderDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         editor = QComboBox(parent)
+        editor.setView(QListView())
         editor.addItems(["М (Мужской)", "Ж (Женский)"])
-        editor.setStyleSheet("font-size: 13px;")
+        editor.setStyleSheet("""
+            QComboBox {
+                font-size: 13px;
+                background-color: #ffffff;
+                color: #1e293b;
+            }
+            QComboBox QAbstractItemView, QComboBox QListView {
+                background-color: #ffffff;
+                color: #1e293b;
+                selection-background-color: #2563eb;
+                selection-color: #ffffff;
+            }
+        """)
         return editor
 
     def setEditorData(self, editor, index):
@@ -236,7 +261,8 @@ class ImportReviewDialog(QDialog):
         toolbar.setMovable(False)
 
         # 1. Кнопка +1 курс всем
-        btn_inc = QPushButton("⏩ +1 курс всем (Перевод на след. год)")
+        btn_inc = QPushButton("+1 курс всем (Перевод на след. год)")
+        btn_inc.setIcon(create_svg_icon(SVG_FAST_FORWARD, "#FFFFFF", 16))
         btn_inc.setStyleSheet(
             "background-color: #2563EB; color: white; font-weight: 600; padding: 6px 14px; border-radius: 6px;"
         )
@@ -245,29 +271,46 @@ class ImportReviewDialog(QDialog):
 
         toolbar.addSeparator()
 
-        # 2. Селектор и кнопка массовой установки курса
+        # 2. Селектор и кнопка массовой установки курса / загрузки как курс X
         lbl_bulk = QLabel("  Назначить курс: ")
         lbl_bulk.setStyleSheet("font-size: 12px; font-weight: 600; color: #475569;")
         toolbar.addWidget(lbl_bulk)
 
         self.combo_target_course = QComboBox()
+        self.combo_target_course.setView(QListView())
         self.combo_target_course.addItems(["1 курс", "2 курс", "3 курс", "4 курс", "5 курс"])
         self.combo_target_course.setCurrentIndex(0)
-        self.combo_target_course.setStyleSheet("padding: 4px 8px; font-size: 12px; min-width: 90px;")
+        self.combo_target_course.setStyleSheet("""
+            QComboBox {
+                padding: 4px 8px;
+                font-size: 12px;
+                min-width: 90px;
+                background-color: #ffffff;
+                color: #1e293b;
+            }
+            QComboBox QAbstractItemView, QComboBox QListView {
+                background-color: #ffffff;
+                color: #1e293b;
+                selection-background-color: #2563eb;
+                selection-color: #ffffff;
+            }
+        """)
         toolbar.addWidget(self.combo_target_course)
 
-        btn_apply_course = QPushButton("Применить")
+        btn_apply_course = QPushButton("Загрузить как выбранный курс")
         btn_apply_course.setStyleSheet(
             "background-color: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; "
             "font-weight: 600; padding: 6px 12px; border-radius: 6px;"
         )
+        btn_apply_course.setToolTip("Устанавливает курс и обновляет 2-ю цифру в номерах групп (например, 1280 -> 1380)")
         btn_apply_course.clicked.connect(self.on_bulk_set_course)
         toolbar.addWidget(btn_apply_course)
 
         toolbar.addSeparator()
 
         # 3. Удалить выпускников
-        btn_remove_grad = QPushButton("🎓 Исключить выпускников")
+        btn_remove_grad = QPushButton("Исключить выпускников")
+        btn_remove_grad.setIcon(create_svg_icon(SVG_GRADUATE, "#92400E", 16))
         btn_remove_grad.setStyleSheet(
             "background-color: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; "
             "font-weight: 600; padding: 6px 12px; border-radius: 6px;"
@@ -276,7 +319,8 @@ class ImportReviewDialog(QDialog):
         toolbar.addWidget(btn_remove_grad)
 
         # 4. Сменить пол выделенным
-        btn_toggle_gender = QPushButton("⚧ Переключить пол выделенным")
+        btn_toggle_gender = QPushButton("Сменить пол (М/Ж)")
+        btn_toggle_gender.setIcon(create_svg_icon(SVG_USERS, "#6B21A8", 16))
         btn_toggle_gender.setStyleSheet(
             "background-color: #F3E8FF; color: #6B21A8; border: 1px solid #E9D5FF; "
             "font-weight: 600; padding: 6px 12px; border-radius: 6px;"
@@ -306,7 +350,7 @@ class ImportReviewDialog(QDialog):
         bottom_bar = QHBoxLayout()
         bottom_bar.setSpacing(10)
 
-        hint_lbl = QLabel("💡 <i>Кликните дважды на ячейку «Курс» или «Пол» для мгновенного изменения</i>")
+        hint_lbl = QLabel("<i>Двойной клик на ячейку «Курс» или «Пол» позволяет изменить значение на месте</i>")
         hint_lbl.setStyleSheet("color: #64748B; font-size: 12px;")
         bottom_bar.addWidget(hint_lbl)
         bottom_bar.addStretch()
@@ -333,17 +377,18 @@ class ImportReviewDialog(QDialog):
         needs_review = sum(1 for c in self.model.cadets if c.needs_manual_review)
 
         self.summary_badge.setText(
-            f"Всего: {total} чел. | 👨 М: {males} | 👩 Ж: {females}"
-            + (f" | ⚠️ Выпускники: {graduated}" if graduated else "")
-            + (f" | 🔍 Проверить пол: {needs_review}" if needs_review else "")
+            f"Всего: {total} чел. | М: {males} | Ж: {females}"
+            + (f" | Выпускники: {graduated}" if graduated else "")
+            + (f" | Проверить пол: {needs_review}" if needs_review else "")
         )
 
     def on_increment_course_all(self):
-        self.model.refresh_data(increment_course_all(self.model.cadets))
+        self.model.refresh_data(increment_course_all(self.model.cadets, update_group_numbers=True))
         self.update_summary_label()
         QMessageBox.information(
             self, "Перевод на следующий курс",
             "Курс всех активных курсантов увеличен на +1.\n"
+            "Номера групп (2-я цифра) автоматически обновлены.\n"
             "Курсанты, превысившие 5-й курс, переведены в статус «Выпускник»."
         )
 
@@ -353,11 +398,11 @@ class ImportReviewDialog(QDialog):
 
         if selected_indexes:
             selected_ids = [self.model.cadets[idx.row()].temp_id for idx in selected_indexes]
-            self.model.refresh_data(bulk_set_course(self.model.cadets, target_course, selected_ids))
-            msg = f"Курс {target_course} назначен для выбранных ({len(selected_ids)} чел.)."
+            self.model.refresh_data(bulk_set_course(self.model.cadets, target_course, selected_ids, update_group_numbers=True))
+            msg = f"Курс {target_course} назначен для выбранных ({len(selected_ids)} чел.). 2-я цифра группы обновлена."
         else:
-            self.model.refresh_data(bulk_set_course(self.model.cadets, target_course, None))
-            msg = f"Курс {target_course} назначен для ВСЕХ курсантов."
+            self.model.refresh_data(bulk_set_course(self.model.cadets, target_course, None, update_group_numbers=True))
+            msg = f"Курс {target_course} назначен для ВСЕХ курсантов. Номера групп обновлены (2-я цифра)."
 
         self.update_summary_label()
         QMessageBox.information(self, "Курс обновлен", msg)

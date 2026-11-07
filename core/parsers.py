@@ -81,8 +81,90 @@ def detect_gender_with_flag(patronymic_or_fio: str, explicit_val: Optional[str] 
     return "male", True
 
 
+def parse_group_code(group_code: Any) -> Tuple[Optional[int], Optional[int], Optional[str]]:
+    """
+    Parses a group code according to the academic mask:
+    - 1st digit: Faculty (e.g. 1)
+    - 2nd digit: Course (e.g. 2 in 1212, 1280, 1290)
+    - 3rd and 4th digits: Subgroup/platoon number (12, 80, 90)
+
+    Returns:
+        (faculty, course, subgroup)
+    """
+    if group_code is None:
+        return None, None, None
+
+    grp_str = str(group_code).strip()
+    # Match standard 4-digit mask (e.g. 1280, 1212, 1490)
+    m4 = re.search(r'\b(\d)(\d)(\d{2})\b', grp_str)
+    if not m4:
+        m4 = re.search(r'(\d)(\d)(\d{2})', grp_str)
+    if m4:
+        faculty = int(m4.group(1))
+        course = int(m4.group(2))
+        subgroup = m4.group(3)
+        return faculty, course, subgroup
+
+    # Fallback: 3 digits (e.g. 221 -> course 2, subgroup 21)
+    m3 = re.search(r'\b(\d)(\d{2})\b', grp_str)
+    if m3:
+        course = int(m3.group(1))
+        subgroup = m3.group(2)
+        return None, course, subgroup
+
+    return None, None, None
+
+
+def change_group_course(group_code: Any, target_course: Union[int, str]) -> str:
+    """
+    Substitutes the 2nd digit (course) of a 4-digit group number with target_course:
+    e.g. '1280' with target_course=3 -> '1380'
+         '1212' with target_course=4 -> '1412'
+         '1290' with target_course=1 -> '1190'
+
+    For 3-digit groups (e.g. '221'), replaces the 1st digit:
+         '221' with target_course=3 -> '321'
+    """
+    if group_code is None:
+        return ""
+
+    grp_str = str(group_code).strip()
+    try:
+        target_digit = str(int(target_course))
+    except (ValueError, TypeError):
+        return grp_str
+
+    def repl_4(m):
+        return f"{m.group(1)}{target_digit}{m.group(2)}"
+
+    new_str, count = re.subn(r'(\b\d)\d(\d{2}\b)', repl_4, grp_str, count=1)
+    if count > 0:
+        return new_str
+
+    new_str, count = re.subn(r'(\d)\d(\d{2})', repl_4, grp_str, count=1)
+    if count > 0:
+        return new_str
+
+    def repl_3(m):
+        return f"{target_digit}{m.group(1)}"
+
+    new_str, count = re.subn(r'\b\d(\d{2}\b)', repl_3, grp_str, count=1)
+    if count > 0:
+        return new_str
+
+    return grp_str
+
+
+def get_course_from_group(group_str: str) -> str:
+    """Returns course as string ('1'..'5') from second digit of 4-digit group, or '?'."""
+    cleaned = "".join(filter(str.isdigit, str(group_str or "")))
+    if len(cleaned) == 4:
+        return cleaned[1]  # Вторая цифра — курс
+    return "?"
+
+
 def extract_course(group_val: Any, explicit_course: Any = None) -> int:
-    """Attempts to determine course (1..5) from explicit column or group number (e.g. '221' -> 2)."""
+    """Attempts to determine course (1..5) from explicit column or group number (e.g. '1280' -> 2, '221' -> 2)."""
     if explicit_course is not None:
         try:
             c = int(str(explicit_course).strip())
@@ -92,11 +174,14 @@ def extract_course(group_val: Any, explicit_course: Any = None) -> int:
             pass
 
     grp_str = str(group_val or "").strip()
-    # Common academic pattern: 3-4 digit group where 1st digit or 2nd is course: e.g. 1280 (1st or 2nd)?
-    # Look for patterns like "1 курс", "2 курс" or first digit in group number:
     m_course_word = re.search(r'([1-5])\s*курс', grp_str, re.IGNORECASE)
     if m_course_word:
         return int(m_course_word.group(1))
+
+    # Match 4-digit mask first: 2nd digit is course
+    faculty, course, subgroup = parse_group_code(grp_str)
+    if course is not None and 1 <= course <= 6:
+        return course
 
     digits = "".join([ch for ch in grp_str if ch.isdigit()])
     if len(digits) >= 1:
@@ -315,9 +400,14 @@ def parse_roster_excel(file_source: Union[str, bytes, BinaryIO]) -> List[Staging
 # STAGING WIZARD TRANSFORMATION FUNCTIONS
 # =====================================================================
 
-def increment_course_all(cadets: List[StagingCadetDTO], max_course: int = 5) -> List[StagingCadetDTO]:
+def increment_course_all(
+    cadets: List[StagingCadetDTO],
+    max_course: int = 5,
+    update_group_numbers: bool = True
+) -> List[StagingCadetDTO]:
     """Increments course by 1 for all active records.
     Records that reach > max_course are transitioned to 'graduated' with a warning badge.
+    If update_group_numbers is True, substitutes the 2nd digit of 4-digit groups.
     """
     updated: List[StagingCadetDTO] = []
     for c in cadets:
@@ -325,6 +415,8 @@ def increment_course_all(cadets: List[StagingCadetDTO], max_course: int = 5) -> 
         if cadet.status == "active":
             new_course = cadet.course + 1
             cadet.course = new_course
+            if update_group_numbers and new_course <= max_course:
+                cadet.group_num = change_group_course(cadet.group_num, new_course)
             if new_course > max_course:
                 cadet.status = "graduated"
                 warn = f"Выпускник (курс {new_course} > {max_course})"
@@ -338,9 +430,12 @@ def bulk_set_course(
     cadets: List[StagingCadetDTO],
     target_course: int,
     selected_temp_ids: Optional[List[str]] = None,
-    max_course: int = 5
+    max_course: int = 5,
+    update_group_numbers: bool = True
 ) -> List[StagingCadetDTO]:
-    """Sets target course (1..5) for selected temp_ids or for all if selected_temp_ids is None."""
+    """Sets target course (1..5) for selected temp_ids or for all if selected_temp_ids is None.
+    If update_group_numbers is True, updates the group number mask accordingly.
+    """
     target_ids = set(selected_temp_ids) if selected_temp_ids else None
     updated: List[StagingCadetDTO] = []
 
@@ -348,6 +443,8 @@ def bulk_set_course(
         cadet = c.model_copy(deep=True)
         if target_ids is None or cadet.temp_id in target_ids:
             cadet.course = target_course
+            if update_group_numbers:
+                cadet.group_num = change_group_course(cadet.group_num, target_course)
             if target_course > max_course:
                 cadet.status = "graduated"
                 warn = f"Курс {target_course} превышает {max_course} (выпускник)"

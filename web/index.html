@@ -153,22 +153,67 @@
         </div>
       </div>
 
+      <!-- 3 Информационные карточки статистики (Всего / Мужчины / Девушки) -->
+      <div class="stats-cards-3">
+        <div class="stat-slice-card total">
+          <div class="stat-slice-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span class="stat-slice-title">Общий состав (Всего)</span>
+          </div>
+          <div id="statCardTotal" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+        </div>
+
+        <div class="stat-slice-card male">
+          <div class="stat-slice-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <circle cx="10" cy="14" r="5"/><line x1="19" y1="5" x2="13.6" y2="10.4"/><polyline points="15 5 19 5 19 9"/>
+            </svg>
+            <span class="stat-slice-title">Мужской состав (Парни)</span>
+          </div>
+          <div id="statCardMale" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+        </div>
+
+        <div class="stat-slice-card female">
+          <div class="stat-slice-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>
+            </svg>
+            <span class="stat-slice-title">Женский состав (Девушки)</span>
+          </div>
+          <div id="statCardFemale" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+        </div>
+      </div>
+
       <!-- Селектор срезов строевой записки (3 среза) -->
       <div class="slice-tabs-nav">
         <button class="slice-tab-btn active" data-slice="total" onclick="switchSliceTab('total')">
-          👥 Общий расход (<span id="sliceTotalCount">0</span> чел.)
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Общий расход (<span id="sliceTotalCount">0</span> чел.)
         </button>
         <button class="slice-tab-btn male" data-slice="male" onclick="switchSliceTab('male')">
-          👨 Мужской состав (<span id="sliceMaleCount">0</span>)
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <circle cx="10" cy="14" r="5"/><line x1="19" y1="5" x2="13.6" y2="10.4"/><polyline points="15 5 19 5 19 9"/>
+          </svg>
+          Мужской состав (<span id="sliceMaleCount">0</span>)
         </button>
         <button class="slice-tab-btn female" data-slice="female" onclick="switchSliceTab('female')">
-          👩 Женский состав (<span id="sliceFemaleCount">0</span>)
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>
+          </svg>
+          Женский состав (<span id="sliceFemaleCount">0</span>)
         </button>
       </div>
 
       <!-- Контрольная плашка математического баланса -->
       <div id="sliceBalanceBanner" class="slice-balance-banner">
-        ⚖️ Сквозной баланс строя подтвержден: Общий = Мужчины + Женщины
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+          <path d="M12 3v18"/><path d="M3 7l9-4 9 4"/><circle cx="6" cy="14" r="3"/><circle cx="18" cy="14" r="3"/>
+        </svg>
+        Сквозной баланс строя подтвержден: Общий = Мужчины + Женщины
       </div>
 
       <!-- KPI Бейджи -->
@@ -348,6 +393,25 @@
               </svg>
               Импорт из Excel
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="openBulkCourseModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+              Сменить курс всех групп
+            </button>
+          </div>
+        </div>
+
+        <!-- Сегментированный фильтр курса -->
+        <div class="course-filter-bar">
+          <span class="course-filter-label">Курс:</span>
+          <div class="segmented-control">
+            <button class="seg-btn active" data-course="all" onclick="filterCadetsByCourse('all')">Все курсы</button>
+            <button class="seg-btn" data-course="1" onclick="filterCadetsByCourse('1')">1 курс</button>
+            <button class="seg-btn" data-course="2" onclick="filterCadetsByCourse('2')">2 курс</button>
+            <button class="seg-btn" data-course="3" onclick="filterCadetsByCourse('3')">3 курс</button>
+            <button class="seg-btn" data-course="4" onclick="filterCadetsByCourse('4')">4 курс</button>
+            <button class="seg-btn" data-course="5" onclick="filterCadetsByCourse('5')">5 курс</button>
           </div>
         </div>
 
@@ -481,6 +545,52 @@
 
   </main>
 
+  <!-- Модальное окно массового перевода курса -->
+  <div id="bulkCourseModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <svg style="width: 18px; height: 18px; color: var(--primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+          </svg>
+          Массовый перевод курса
+        </div>
+        <button class="modal-close" onclick="closeBulkCourseModal()">
+          <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
+          Выберите целевой курс. У всех 4-значных групп (например, 1280) вторая цифра будет заменена на выбранный курс (станет 1380).
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="bulkTargetCourseSelect">Установить курс для всех групп:</label>
+          <select id="bulkTargetCourseSelect" class="form-select">
+            <option value="1">1 курс</option>
+            <option value="2">2 курс</option>
+            <option value="3" selected>3 курс</option>
+            <option value="4">4 курс</option>
+            <option value="5">5 курс</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeBulkCourseModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="applyBulkCourseChange()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Применить ко всем
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Модальное окно добавления/редактирования курсанта -->
   <div id="cadetModal" class="modal-backdrop">
     <div class="modal-card">
@@ -558,7 +668,10 @@
       <!-- Тулбар действий -->
       <div class="wizard-toolbar">
         <button class="btn btn-primary btn-sm" onclick="wizardIncrementCourseAll()">
-          ⏩ +1 курс всем
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+            <polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/>
+          </svg>
+          +1 курс всем
         </button>
 
         <span style="color: var(--border-color);">|</span>
@@ -572,13 +685,16 @@
           <option value="5">5 курс</option>
         </select>
         <button class="btn btn-secondary btn-sm" onclick="wizardBulkSetCourse()">
-          Применить
+          Загрузить как выбранный курс
         </button>
 
         <span style="color: var(--border-color);">|</span>
 
         <button class="btn btn-sm" style="background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A;" onclick="wizardRemoveGraduates()">
-          🎓 Исключить выпускников
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+          Исключить выпускников
         </button>
       </div>
 

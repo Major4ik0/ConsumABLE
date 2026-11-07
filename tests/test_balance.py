@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 from core.models import RosterSliceBalance, TriSliceBalance
-from core.balance import calculate_slice_metrics, compute_tri_slice_balance
+from core.balance import calculate_slice_metrics, compute_tri_slice_balance, compute_gender_distribution
 
 
 class TestSliceBalanceMath:
@@ -101,3 +101,14 @@ class TestTriSliceBalanceIdentity:
         tri = TriSliceBalance(total=total, male=male, female=female)
         assert tri.is_sum_balanced is False
         assert "Общий (10) != М (6) + Ж (3)" in tri.error_message
+
+    def test_compute_gender_distribution(self, sample_data):
+        cadets, absences, categories = sample_data
+        dist = compute_gender_distribution(cadets, absences, categories=categories)
+        assert dist["total"]["listed"] == 5
+        assert dist["male"]["listed"] == 3
+        assert dist["female"]["listed"] == 2
+        assert dist["total"]["absent"] == 2
+        assert dist["male"]["absent"] == 1
+        assert dist["female"]["absent"] == 1
+        assert dist["is_balanced"] is True

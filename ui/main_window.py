@@ -4,39 +4,52 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTableWidget, QTableWidgetItem, QComboBox,
     QLineEdit, QDateEdit, QFileDialog, QMessageBox, QTabWidget,
-    QHeaderView, QFrame, QAbstractItemView, QDialog, QFormLayout, QDialogButtonBox
+    QHeaderView, QFrame, QAbstractItemView, QDialog, QFormLayout, QDialogButtonBox,
+    QButtonGroup, QListView
 )
 from PyQt5.QtCore import Qt, QDate, QByteArray, QSize
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
 from PyQt5.QtSvg import QSvgRenderer
 
 from database import Database
-from core.parsers import parse_roster_excel, make_short_fio
+from core.parsers import (
+    parse_roster_excel, make_short_fio, change_group_course,
+    parse_group_code, get_course_from_group
+)
 from core.models import normalize_gender, gender_to_ru
 from core.balance import compute_tri_slice_balance
 from core.exporter import export_report_to_excel
 from ui.dialogs.import_wizard import ImportReviewDialog
+from ui.icons import (
+    SVG_CLIPBOARD, SVG_USERS, SVG_SETTINGS, SVG_EXPORT, SVG_IMPORT,
+    SVG_PLUS, SVG_TRASH, SVG_CALENDAR, SVG_EDIT, SVG_SAVE, SVG_MALE,
+    SVG_FEMALE, SVG_GRADUATE, SVG_FAST_FORWARD, SVG_CHECK, SVG_CROSS,
+    SVG_SCALE, SVG_ALERT, SVG_SEARCH, SVG_FILTER, SVG_REFRESH, SVG_INFO,
+    create_svg_icon
+)
 
-# SVG Icons
-SVG_CLIPBOARD = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>'''
-SVG_USERS = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'''
-SVG_SETTINGS = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'''
-SVG_EXPORT = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'''
-SVG_IMPORT = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'''
-SVG_PLUS = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'''
-SVG_TRASH = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'''
-SVG_CALENDAR = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'''
-SVG_EDIT = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'''
-
-def create_svg_icon(svg_str: str, color: str = "#2563EB", size: int = 18) -> QIcon:
-    colored_svg = svg_str.replace('currentColor', color)
-    renderer = QSvgRenderer(QByteArray(colored_svg.encode('utf-8')))
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
-    painter = QPainter(pixmap)
-    renderer.render(painter)
-    painter.end()
-    return QIcon(pixmap)
+POPUP_STYLE = """
+QListView {
+    background-color: #ffffff;
+    color: #1e293b;
+    selection-background-color: #2563eb;
+    selection-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    outline: none;
+}
+QListView::item {
+    min-height: 28px;
+    padding: 5px 8px;
+    background-color: #ffffff;
+    color: #1e293b;
+}
+QListView::item:selected,
+QListView::item:hover {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+"""
 
 MODERN_STYLE = """
 * {
@@ -109,6 +122,45 @@ QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
     padding: 6px 11px;
 }
 
+QComboBox {
+    background-color: #FFFFFF;
+    color: #1E293B;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 5px 10px;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView,
+QComboBox QListView,
+QListView {
+    background-color: #FFFFFF;
+    color: #1E293B;
+    selection-background-color: #2563EB;
+    selection-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    outline: none;
+}
+
+QComboBox QAbstractItemView::item,
+QComboBox QListView::item,
+QListView::item {
+    min-height: 28px;
+    padding: 4px 8px;
+    background-color: #FFFFFF;
+    color: #1E293B;
+}
+
+QComboBox QAbstractItemView::item:selected,
+QComboBox QListView::item:selected,
+QListView::item:selected {
+    background-color: #2563EB;
+    color: #FFFFFF;
+}
+
 QPushButton {
     background-color: #2563EB;
     color: #FFFFFF;
@@ -135,6 +187,13 @@ QPushButton#importBtn {
 }
 QPushButton#importBtn:hover {
     background-color: #4338CA;
+}
+
+QPushButton#bulkCourseBtn {
+    background-color: #0284C7;
+}
+QPushButton#bulkCourseBtn:hover {
+    background-color: #0369A1;
 }
 
 QPushButton#todayBtn {
@@ -200,6 +259,8 @@ class CadetDialog(QDialog):
         self.edit_fio.setPlaceholderText("Фамилия Имя Отчество")
 
         self.edit_group = QComboBox()
+        self.edit_group.setView(QListView())
+        self.edit_group.view().setStyleSheet(POPUP_STYLE)
         self.edit_group.setEditable(True)
         if available_groups:
             self.edit_group.addItems([str(g) for g in available_groups])
@@ -207,11 +268,15 @@ class CadetDialog(QDialog):
             self.edit_group.setCurrentText(str(cadet['group_num']))
 
         self.edit_course = QComboBox()
+        self.edit_course.setView(QListView())
+        self.edit_course.view().setStyleSheet(POPUP_STYLE)
         self.edit_course.addItems(["1 курс", "2 курс", "3 курс", "4 курс", "5 курс"])
         curr_course = cadet.get('course', 1) if cadet else 1
         self.edit_course.setCurrentIndex(max(0, min(4, curr_course - 1)))
 
         self.edit_gender = QComboBox()
+        self.edit_gender.setView(QListView())
+        self.edit_gender.view().setStyleSheet(POPUP_STYLE)
         self.edit_gender.addItems(["М (Мужской)", "Ж (Женский)"])
         if cadet:
             g = normalize_gender(cadet.get('gender', 'male'))
@@ -253,6 +318,96 @@ class CadetDialog(QDialog):
             'gender': "Ж" if self.edit_gender.currentIndex() == 1 else "М",
             'status': "active"
         }
+
+
+class BulkCourseDialog(QDialog):
+    """Диалог массового перевода курса для всех учебных групп."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Массовый перевод курса")
+        self.setFixedSize(400, 220)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #FFFFFF;
+            }
+            QLabel {
+                color: #0F172A;
+                font-size: 13px;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(14)
+
+        title_lbl = QLabel("Массовый перевод курса")
+        title_lbl.setStyleSheet("font-weight: 700; font-size: 16px; color: #0F172A;")
+        layout.addWidget(title_lbl)
+
+        desc_lbl = QLabel("У всех 4-значных групп (например, 1280) вторая цифра будет заменена на выбранный курс (станет 1380).")
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("color: #64748B; font-size: 12px; line-height: 1.4;")
+        layout.addWidget(desc_lbl)
+
+        form_layout = QHBoxLayout()
+        form_lbl = QLabel("Установить курс:")
+        form_lbl.setStyleSheet("font-weight: 600; color: #334155;")
+        self.cb_course = QComboBox()
+        self.cb_course.setView(QListView())
+        self.cb_course.view().setStyleSheet(POPUP_STYLE)
+        self.cb_course.addItems(["1 курс", "2 курс", "3 курс", "4 курс", "5 курс"])
+        self.cb_course.setCurrentIndex(2)  # 3 курс по умолчанию
+        self.cb_course.setFixedHeight(34)
+        form_layout.addWidget(form_lbl)
+        form_layout.addWidget(self.cb_course, 1)
+        layout.addLayout(form_layout)
+
+        layout.addStretch()
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.btn_cancel = QPushButton("Отмена")
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #334155;
+                font-weight: 600;
+                font-size: 13px;
+                border-radius: 6px;
+                padding: 7px 16px;
+                border: 1px solid #CBD5E1;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
+            }
+        """)
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(self.btn_cancel)
+
+        self.btn_apply = QPushButton("Применить ко всем")
+        self.btn_apply.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: 600;
+                font-size: 13px;
+                border-radius: 6px;
+                padding: 7px 16px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        self.btn_apply.setIcon(create_svg_icon(SVG_CHECK, "#FFFFFF", 14))
+        self.btn_apply.clicked.connect(self.accept)
+        btn_layout.addWidget(self.btn_apply)
+
+        layout.addLayout(btn_layout)
+
+    def get_selected_course(self) -> int:
+        return self.cb_course.currentIndex() + 1
 
 
 class MainWindow(QMainWindow):
@@ -338,20 +493,30 @@ class MainWindow(QMainWindow):
         add_layout.setSpacing(10)
 
         self.cb_cadets = QComboBox()
+        self.cb_cadets.setView(QListView())
+        self.cb_cadets.view().setStyleSheet(POPUP_STYLE)
         self.cb_cadets.setEditable(True)
         self.cb_cadets.setInsertPolicy(QComboBox.NoInsert)
         if self.cb_cadets.completer():
             self.cb_cadets.completer().setFilterMode(Qt.MatchContains)
+            comp_popup = QListView()
+            comp_popup.setStyleSheet(POPUP_STYLE)
+            self.cb_cadets.completer().setPopup(comp_popup)
         self.cb_cadets.setPlaceholderText("Фамилия курсанта...")
         if self.cb_cadets.lineEdit():
             self.cb_cadets.lineEdit().returnPressed.connect(self.on_cadet_return_pressed)
         add_layout.addWidget(self.cb_cadets, 4)
 
         self.cb_types = QComboBox()
+        self.cb_types.setView(QListView())
+        self.cb_types.view().setStyleSheet(POPUP_STYLE)
         self.cb_types.setEditable(True)
         self.cb_types.setInsertPolicy(QComboBox.NoInsert)
         if self.cb_types.completer():
             self.cb_types.completer().setFilterMode(Qt.MatchContains)
+            comp_popup_types = QListView()
+            comp_popup_types.setStyleSheet(POPUP_STYLE)
+            self.cb_types.completer().setPopup(comp_popup_types)
         self.cb_types.setPlaceholderText("Причина (наряд, увольнение...)...")
         if self.cb_types.lineEdit():
             self.cb_types.lineEdit().returnPressed.connect(self.on_type_return_pressed)
@@ -369,6 +534,51 @@ class MainWindow(QMainWindow):
         add_layout.addWidget(btn_add, 2)
 
         layout.addWidget(add_box)
+
+        # -------------------------------------------------------------
+        # 3 ИНФОРМАЦИОННЫЕ КАРТОЧКИ СО СТАТИСТИКОЙ (Всего / Мужчины / Девушки)
+        # -------------------------------------------------------------
+        stats_frame = QFrame()
+        stats_frame.setObjectName("cardFrame")
+        stats_layout = QHBoxLayout(stats_frame)
+        stats_layout.setContentsMargins(10, 10, 10, 10)
+        stats_layout.setSpacing(12)
+
+        def create_stat_card(title: str, icon_svg: str, icon_color: str, card_id: str):
+            card = QFrame()
+            card.setStyleSheet("""
+                QFrame {
+                    background: #FFFFFF;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 8px;
+                    padding: 8px 12px;
+                }
+            """)
+            c_layout = QVBoxLayout(card)
+            c_layout.setContentsMargins(4, 4, 4, 4)
+            c_layout.setSpacing(4)
+
+            header = QHBoxLayout()
+            lbl_icon = QLabel()
+            lbl_icon.setPixmap(create_svg_icon(icon_svg, icon_color, 16).pixmap(16, 16))
+            lbl_title = QLabel(title)
+            lbl_title.setStyleSheet(f"font-weight: 700; font-size: 13px; color: {icon_color};")
+            header.addWidget(lbl_icon)
+            header.addWidget(lbl_title)
+            header.addStretch()
+            c_layout.addLayout(header)
+
+            val_lbl = QLabel("По списку: 0 чел. | В строю: 0 чел. | В расходе: 0 чел.")
+            val_lbl.setStyleSheet("font-size: 12px; font-weight: 600; color: #334155;")
+            c_layout.addWidget(val_lbl)
+
+            setattr(self, f"card_stat_{card_id}", val_lbl)
+            return card
+
+        stats_layout.addWidget(create_stat_card("Общий состав (Всего)", SVG_USERS, "#2563EB", "total"))
+        stats_layout.addWidget(create_stat_card("Мужской состав (Парни)", SVG_MALE, "#1D4ED8", "male"))
+        stats_layout.addWidget(create_stat_card("Женский состав (Девушки)", SVG_FEMALE, "#DB2777", "female"))
+        layout.addWidget(stats_frame)
 
         # -------------------------------------------------------------
         # 3 НЕЗАВИСИМЫХ СРЕЗА РАСХОДА (QTabWidget)
@@ -389,9 +599,9 @@ class MainWindow(QMainWindow):
         # Срез 3: Женский состав
         self.tab_slice_female = self.create_single_slice_tab("female")
 
-        self.slice_tabs.addTab(self.tab_slice_total, "👥 Общий расход")
-        self.slice_tabs.addTab(self.tab_slice_male, "👨 Мужской состав")
-        self.slice_tabs.addTab(self.tab_slice_female, "👩 Женский состав")
+        self.slice_tabs.addTab(self.tab_slice_total, create_svg_icon(SVG_USERS, "#2563EB", 16), "Общий расход")
+        self.slice_tabs.addTab(self.tab_slice_male, create_svg_icon(SVG_MALE, "#1D4ED8", 16), "Мужской состав")
+        self.slice_tabs.addTab(self.tab_slice_female, create_svg_icon(SVG_FEMALE, "#DB2777", 16), "Женский состав")
         layout.addWidget(self.slice_tabs)
 
         # Контрольная плашка математического баланса
@@ -480,8 +690,17 @@ class MainWindow(QMainWindow):
         btn_import.clicked.connect(self.import_cadets_excel)
         top_panel.addWidget(btn_import)
 
+        btn_bulk_course = QPushButton("Сменить курс всех групп")
+        btn_bulk_course.setObjectName("bulkCourseBtn")
+        btn_bulk_course.setFixedHeight(36)
+        btn_bulk_course.setIcon(create_svg_icon(SVG_REFRESH, "#FFFFFF", 14))
+        btn_bulk_course.clicked.connect(self.open_bulk_course_dialog)
+        top_panel.addWidget(btn_bulk_course)
+
         # Фильтр по курсу
         self.combo_course_filter = QComboBox()
+        self.combo_course_filter.setView(QListView())
+        self.combo_course_filter.view().setStyleSheet(POPUP_STYLE)
         self.combo_course_filter.setFixedHeight(36)
         self.combo_course_filter.addItems(["Все курсы", "1 курс", "2 курс", "3 курс", "4 курс", "5 курс"])
         self.combo_course_filter.currentIndexChanged.connect(self.load_cadets_table)
@@ -489,6 +708,8 @@ class MainWindow(QMainWindow):
 
         # Фильтр по полу
         self.combo_gender_filter = QComboBox()
+        self.combo_gender_filter.setView(QListView())
+        self.combo_gender_filter.view().setStyleSheet(POPUP_STYLE)
         self.combo_gender_filter.setFixedHeight(36)
         self.combo_gender_filter.addItems(["Все (М и Ж)", "Только мужчины", "Только женщины"])
         self.combo_gender_filter.currentIndexChanged.connect(self.load_cadets_table)
@@ -496,6 +717,8 @@ class MainWindow(QMainWindow):
 
         # Выпадающий фильтр по учебным группам
         self.combo_group_filter = QComboBox()
+        self.combo_group_filter.setView(QListView())
+        self.combo_group_filter.view().setStyleSheet(POPUP_STYLE)
         self.combo_group_filter.setFixedHeight(36)
         self.combo_group_filter.currentIndexChanged.connect(self.load_cadets_table)
         top_panel.addWidget(self.combo_group_filter)
@@ -507,6 +730,53 @@ class MainWindow(QMainWindow):
         top_panel.addWidget(self.edit_search)
 
         layout.addLayout(top_panel)
+
+        # Сегментированный переключатель курса: [ Все ] [ 1 ] [ 2 ] [ 3 ] [ 4 ] [ 5 ]
+        course_bar = QFrame()
+        course_bar.setObjectName("cardFrame")
+        course_bar_layout = QHBoxLayout(course_bar)
+        course_bar_layout.setContentsMargins(8, 6, 8, 6)
+        course_bar_layout.setSpacing(6)
+
+        lbl_c_filter = QLabel("Курс:")
+        lbl_c_filter.setStyleSheet("font-weight: 700; font-size: 13px; color: #334155; margin-right: 4px;")
+        course_bar_layout.addWidget(lbl_c_filter)
+
+        self.course_btn_group = QButtonGroup(self)
+        self.course_btn_group.setExclusive(True)
+        self.selected_course_filter = 0
+
+        courses = [("Все курсы", 0), ("1 курс", 1), ("2 курс", 2), ("3 курс", 3), ("4 курс", 4), ("5 курс", 5)]
+        for lbl_text, c_val in courses:
+            btn = QPushButton(lbl_text)
+            btn.setCheckable(True)
+            if c_val == 0:
+                btn.setChecked(True)
+            btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid #CBD5E1;
+                    background: #FFFFFF;
+                    color: #334155;
+                    border-radius: 6px;
+                    padding: 5px 14px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                QPushButton:checked {
+                    background: #2563EB;
+                    color: #FFFFFF;
+                    border-color: #1D4ED8;
+                }
+                QPushButton:hover:!checked {
+                    background: #F1F5F9;
+                }
+            """)
+            self.course_btn_group.addButton(btn, c_val)
+            course_bar_layout.addWidget(btn)
+
+        self.course_btn_group.buttonClicked[int].connect(self.on_course_segmented_clicked)
+        course_bar_layout.addStretch()
+        layout.addWidget(course_bar)
 
         self.table_cadets = QTableWidget()
         self.table_cadets.setColumnCount(8)
@@ -582,7 +852,37 @@ class MainWindow(QMainWindow):
         self.cb_cadets.clear()
         cadets = self.db.get_all_cadets()
         for c in cadets:
-            self.cb_cadets.addItem(f"{c['short_fio']} | {c['rank']} (гр. {c['group_num']}, {c.get('course', 1)} к.)", userData=c['id'])
+            cg = get_course_from_group(c['group_num'])
+            course_display = cg if cg != "?" else str(c.get('course', 1))
+            self.cb_cadets.addItem(f"{c['short_fio']} | {c['rank']} (гр. {c['group_num']}, {course_display} к.)", userData=c['id'])
+
+    def open_bulk_course_dialog(self):
+        dlg = BulkCourseDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            target_course = dlg.get_selected_course()
+            self.db.bulk_set_course(target_course, update_group_numbers=True)
+            self.update_group_filter_options()
+            self.load_cadets_table()
+            self.load_cadets_combo()
+            self.load_daily_data()
+            QMessageBox.information(
+                self,
+                "Успех",
+                f"Курс всех групп успешно изменен на {target_course} курс.\nНомера групп обновлены (например, 1280 -> 1{target_course}80)."
+            )
+
+    def on_course_segmented_clicked(self, course_id: int):
+        self.selected_course_filter = course_id
+        if hasattr(self, "combo_course_filter"):
+            self.combo_course_filter.blockSignals(True)
+            self.combo_course_filter.setCurrentIndex(course_id)
+            self.combo_course_filter.blockSignals(False)
+        self.load_cadets_table()
+
+    def toggle_cadet_gender_action(self, cadet_id: int):
+        self.db.toggle_cadet_gender(cadet_id)
+        self.load_cadets_table()
+        self.load_daily_data()
 
     def load_daily_data(self):
         d_str = self.get_selected_date_str()
@@ -592,6 +892,20 @@ class MainWindow(QMainWindow):
         # Compute 3-slice balance
         categories = self.db.get_distinct_categories()
         balance = compute_tri_slice_balance(cadets, absences, categories)
+
+        # Update 3 information cards (Всего / Мужчины / Девушки)
+        if hasattr(self, "card_stat_total"):
+            self.card_stat_total.setText(
+                f"По списку: {balance.total.listed_count} чел. | В строю: {balance.total.present_count} чел. | В расходе: {balance.total.absent_count} чел."
+            )
+        if hasattr(self, "card_stat_male"):
+            self.card_stat_male.setText(
+                f"По списку: {balance.male.listed_count} чел. | В строю: {balance.male.present_count} чел. | В расходе: {balance.male.absent_count} чел."
+            )
+        if hasattr(self, "card_stat_female"):
+            self.card_stat_female.setText(
+                f"По списку: {balance.female.listed_count} чел. | В строю: {balance.female.present_count} чел. | В расходе: {balance.female.absent_count} чел."
+            )
 
         slices_data = [
             ("total", balance.total, absences),
@@ -608,9 +922,9 @@ class MainWindow(QMainWindow):
             badge_cats = getattr(self, f"badge_cats_{key}", None)
             tbl = getattr(self, f"table_absences_{key}", None)
 
-            if badge_ps: badge_ps.setText(f"📋 По списку: {s_bal.listed_count}")
-            if badge_nl: badge_nl.setText(f"✅ В строю: {s_bal.present_count}")
-            if badge_abs: badge_abs.setText(f"⚠️ В расходе: {s_bal.absent_count}")
+            if badge_ps: badge_ps.setText(f"По списку: {s_bal.listed_count}")
+            if badge_nl: badge_nl.setText(f"В строю: {s_bal.present_count}")
+            if badge_abs: badge_abs.setText(f"В расходе: {s_bal.absent_count}")
 
             if badge_cats:
                 breakdown = [f"{k}: {v}" for k, v in s_bal.categories_breakdown.items() if v > 0]
@@ -645,17 +959,17 @@ class MainWindow(QMainWindow):
                 "border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 12px;"
             )
             self.balance_bar.setText(
-                f"⚖️ Сквозной баланс строя подтвержден: "
+                f"Сквозной баланс строя подтвержден: "
                 f"Общий [П/С: {balance.total.listed_count}, В строю: {balance.total.present_count}, Расход: {balance.total.absent_count}] "
                 f"= Мужчины [{balance.male.listed_count}/{balance.male.present_count}/{balance.male.absent_count}] "
-                f"+ Женщины [{balance.female.listed_count}/{balance.female.present_count}/{balance.female.absent_count}] ✓"
+                f"+ Женщины [{balance.female.listed_count}/{balance.female.present_count}/{balance.female.absent_count}]"
             )
         else:
             self.balance_bar.setStyleSheet(
                 "background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; "
                 "border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 12px;"
             )
-            self.balance_bar.setText(f"❌ НАРУШЕНИЕ БАЛАНСА: {balance.error_message}")
+            self.balance_bar.setText(f"НАРУШЕНИЕ БАЛАНСА: {balance.error_message}")
 
     def on_cadet_return_pressed(self):
         text = self.cb_cadets.currentText().strip().lower()
@@ -801,9 +1115,19 @@ class MainWindow(QMainWindow):
         cadets = self.db.get_all_cadets(active_only=False)
 
         # Filter by course
-        course_idx = self.combo_course_filter.currentIndex()
-        if course_idx > 0:
-            cadets = [c for c in cadets if c.get('course') == course_idx]
+        c_filter = getattr(self, "selected_course_filter", 0)
+        if c_filter > 0:
+            cadets = [
+                c for c in cadets
+                if (get_course_from_group(c.get('group_num')) == str(c_filter) if get_course_from_group(c.get('group_num')) != "?" else c.get('course') == c_filter)
+            ]
+        else:
+            course_idx = self.combo_course_filter.currentIndex()
+            if course_idx > 0:
+                cadets = [
+                    c for c in cadets
+                    if (get_course_from_group(c.get('group_num')) == str(course_idx) if get_course_from_group(c.get('group_num')) != "?" else c.get('course') == course_idx)
+                ]
 
         # Filter by gender
         gender_idx = self.combo_gender_filter.currentIndex()
@@ -835,14 +1159,45 @@ class MainWindow(QMainWindow):
             self.table_cadets.setItem(r, 1, QTableWidgetItem(c.get('rank', 'курсант')))
             self.table_cadets.setItem(r, 2, QTableWidgetItem(c.get('fio', '')))
             self.table_cadets.setItem(r, 3, QTableWidgetItem(c.get('short_fio', '')))
+            cg = get_course_from_group(c.get('group_num', ''))
+            course_val = cg if cg != "?" else str(c.get('course', 1))
             self.table_cadets.setItem(r, 4, QTableWidgetItem(str(c.get('group_num', ''))))
-            self.table_cadets.setItem(r, 5, QTableWidgetItem(str(c.get('course', 1))))
+            self.table_cadets.setItem(r, 5, QTableWidgetItem(f"{course_val} курс"))
 
             g_ru = gender_to_ru(c.get('gender', 'male'))
-            g_item = QTableWidgetItem(g_ru)
-            g_item.setTextAlignment(Qt.AlignCenter)
-            g_item.setForeground(QColor("#BE185D" if g_ru == "Ж" else "#1D4ED8"))
-            self.table_cadets.setItem(r, 6, g_item)
+            btn_gender = QPushButton(f" {g_ru}")
+            cid = c['id']
+            if g_ru == "Ж":
+                btn_gender.setIcon(create_svg_icon(SVG_FEMALE, "#BE185D", 14))
+                btn_gender.setStyleSheet("""
+                    QPushButton {
+                        background: #FDF2F8;
+                        color: #BE185D;
+                        border: 1px solid #FBCFE8;
+                        border-radius: 4px;
+                        font-weight: 700;
+                        padding: 3px 6px;
+                        font-size: 12px;
+                    }
+                    QPushButton:hover { background: #FCE7F3; }
+                """)
+            else:
+                btn_gender.setIcon(create_svg_icon(SVG_MALE, "#1D4ED8", 14))
+                btn_gender.setStyleSheet("""
+                    QPushButton {
+                        background: #EFF6FF;
+                        color: #1D4ED8;
+                        border: 1px solid #BFDBFE;
+                        border-radius: 4px;
+                        font-weight: 700;
+                        padding: 3px 6px;
+                        font-size: 12px;
+                    }
+                    QPushButton:hover { background: #DBEAFE; }
+                """)
+            btn_gender.setToolTip("Нажмите для быстрой смены пола курсанта (М ↔ Ж)")
+            btn_gender.clicked.connect(lambda _, cadet_id=cid: self.toggle_cadet_gender_action(cadet_id))
+            self.table_cadets.setCellWidget(r, 6, btn_gender)
 
             act_widget = QWidget()
             act_layout = QHBoxLayout(act_widget)

@@ -7,7 +7,9 @@ from core.parsers import (
     bulk_set_course,
     remove_graduates,
     toggle_gender,
-    make_short_fio
+    make_short_fio,
+    parse_group_code,
+    change_group_course
 )
 from core.models import StagingCadetDTO
 
@@ -121,3 +123,37 @@ class TestCourseTransformations:
         assert extract_course("221") == 2
         assert extract_course("3 курс") == 3
         assert extract_course("520", explicit_course=4) == 4
+        # 4-digit academic mask: 2nd digit is course
+        assert extract_course("1280") == 2
+        assert extract_course("1390") == 3
+        assert extract_course("1412") == 4
+
+    def test_parse_group_code(self):
+        # 4-digit mask: faculty, course, subgroup
+        assert parse_group_code("1280") == (1, 2, "80")
+        assert parse_group_code("1212") == (1, 2, "12")
+        assert parse_group_code("2390") == (2, 3, "90")
+        # 3-digit fallback
+        assert parse_group_code("221") == (None, 2, "21")
+        # None / invalid
+        assert parse_group_code(None) == (None, None, None)
+
+    def test_change_group_course(self):
+        # Substitutes 2nd digit of 4-digit mask
+        assert change_group_course("1280", 3) == "1380"
+        assert change_group_course("1212", 4) == "1412"
+        assert change_group_course("1490", 1) == "1190"
+        assert change_group_course("2380", "5") == "2580"
+        # 3-digit fallback
+        assert change_group_course("221", 3) == "321"
+        assert change_group_course("", 2) == ""
+
+    def test_get_course_from_group(self):
+        from core.parsers import get_course_from_group
+        assert get_course_from_group("1280") == "2"
+        assert get_course_from_group("1212") == "2"
+        assert get_course_from_group("1390") == "3"
+        assert get_course_from_group("2180") == "1"
+        assert get_course_from_group("221") == "?"
+        assert get_course_from_group("") == "?"
+        assert get_course_from_group(None) == "?"

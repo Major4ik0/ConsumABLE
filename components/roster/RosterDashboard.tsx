@@ -167,7 +167,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
               style={{ ...btnStyle, backgroundColor: '#4F46E5' }}
               onClick={() => document.getElementById('excel-upload-input')?.click()}
             >
-              📥 Импорт Excel (Wizard)
+              Импорт Excel (Wizard)
             </button>
 
             <a
@@ -175,7 +175,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
               download
               style={{ ...btnStyle, backgroundColor: '#059669', textDecoration: 'none' }}
             >
-              📊 Скачать Excel (.xlsx)
+              Скачать Excel (.xlsx)
             </a>
           </div>
         </div>
@@ -192,7 +192,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
           }}
           onClick={() => setActiveSlice('total')}
         >
-          👥 Общий расход {balance ? `(${balance.total.listed_count} чел.)` : ''}
+          Общий расход {balance ? `(${balance.total.listed_count} чел.)` : ''}
         </button>
 
         <button
@@ -204,7 +204,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
           }}
           onClick={() => setActiveSlice('male')}
         >
-          👨 Мужской состав {balance ? `(${balance.male.listed_count})` : ''}
+          Мужской состав {balance ? `(${balance.male.listed_count})` : ''}
         </button>
 
         <button
@@ -216,7 +216,7 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
           }}
           onClick={() => setActiveSlice('female')}
         >
-          👩 Женский состав {balance ? `(${balance.female.listed_count})` : ''}
+          Женский состав {balance ? `(${balance.female.listed_count})` : ''}
         </button>
       </div>
 
@@ -266,13 +266,13 @@ export const RosterDashboard: React.FC<RosterDashboardProps> = ({
         >
           {balance.is_sum_balanced ? (
             <span>
-              ⚖️ <strong>Сквозной математический баланс подтвержден:</strong> Общий [П/С: {balance.total.listed_count}, В строю: {balance.total.present_count}, Расход: {balance.total.absent_count}]
+              <strong>Сквозной математический баланс подтвержден:</strong> Общий [П/С: {balance.total.listed_count}, В строю: {balance.total.present_count}, Расход: {balance.total.absent_count}]
               = Мужчины [{balance.male.listed_count}/{balance.male.present_count}/{balance.male.absent_count}]
-              + Женщины [{balance.female.listed_count}/{balance.female.present_count}/{balance.female.absent_count}] ✓
+              + Женщины [{balance.female.listed_count}/{balance.female.present_count}/{balance.female.absent_count}]
             </span>
           ) : (
             <span>
-              ❌ <strong>Сбой математического баланса:</strong> {balance.error_message}
+              <strong>Сбой математического баланса:</strong> {balance.error_message}
             </span>
           )}
         </div>

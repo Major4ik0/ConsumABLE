@@ -352,16 +352,32 @@ body {
   color: var(--text-muted);
 }
 
+html, body {
+  color-scheme: light !important;
+}
+
 .form-input, .form-select {
   width: 100%;
   padding: 8px 12px;
   font-size: 13px;
   border: 1px solid #CBD5E1;
   border-radius: var(--radius-sm);
-  background-color: #FFFFFF;
-  color: var(--text-main);
+  background-color: #FFFFFF !important;
+  color: var(--text-main) !important;
   outline: none;
   transition: all 0.15s ease;
+  color-scheme: light !important;
+}
+
+select, select option, .form-select, .form-select option, .dropdown-list, .dropdown-item, .autocomplete-dropdown, .autocomplete-item {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  color-scheme: light !important;
+}
+
+select option:hover, select option:checked, .dropdown-item:hover, .autocomplete-item:hover, .autocomplete-item.selected {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
 }
 
 .form-input:focus, .form-select:focus {
@@ -382,7 +398,7 @@ body {
   right: 0;
   max-height: 240px;
   overflow-y: auto;
-  background: #FFFFFF;
+  background: #FFFFFF !important;
   border: 1px solid #CBD5E1;
   border-radius: var(--radius-sm);
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
@@ -397,7 +413,8 @@ body {
 .autocomplete-item {
   padding: 8px 12px;
   font-size: 13px;
-  color: var(--text-main);
+  color: #1E293B !important;
+  background-color: #FFFFFF !important;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -413,8 +430,17 @@ body {
 
 .autocomplete-item:hover,
 .autocomplete-item.selected {
-  background-color: #EFF6FF;
-  color: #1E40AF;
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+}
+
+.autocomplete-item:hover .autocomplete-item-text,
+.autocomplete-item.selected .autocomplete-item-text,
+.autocomplete-item:hover .autocomplete-item-text strong,
+.autocomplete-item.selected .autocomplete-item-text strong,
+.autocomplete-item:hover .autocomplete-item-text span,
+.autocomplete-item.selected .autocomplete-item-text span {
+  color: #FFFFFF !important;
 }
 
 .autocomplete-item-main {
@@ -733,6 +759,100 @@ body {
 }
 
 /* 3-Slice Tabs & Balance Banner */
+.stats-cards-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.stat-slice-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-slice-card.total { border-left: 4px solid var(--primary); }
+.stat-slice-card.male { border-left: 4px solid #1D4ED8; }
+.stat-slice-card.female { border-left: 4px solid #BE185D; }
+
+.stat-slice-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stat-slice-card.total .stat-slice-header { color: var(--primary); }
+.stat-slice-card.male .stat-slice-header { color: #1D4ED8; }
+.stat-slice-card.female .stat-slice-header { color: #BE185D; }
+
+.stat-slice-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.icon-sm {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Course Segmented Control */
+.course-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+
+.course-filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.segmented-control {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.seg-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.seg-btn:hover {
+  background: #F1F5F9;
+}
+
+.seg-btn.active {
+  background: var(--primary);
+  color: #FFFFFF;
+  border-color: var(--primary);
+}
+
 .slice-tabs-nav {
   display: flex;
   gap: 8px;

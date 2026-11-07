@@ -267,12 +267,16 @@ function parseCadetsSheet(ws, defaultGroup = "", seenGroups = []) {
     }
     const gender = detectGender(fio, rawGender);
 
+    const cg = getCourseFromGroup(groupNum);
+    const crsVal = cg !== "?" ? parseInt(cg, 10) : 1;
+
     cadets.push({
       id: nextCadetId++,
       rank: rank,
       fio: fio,
       short_fio: shortFio,
       group_num: groupNum,
+      course: crsVal,
       gender: gender,
       sort_order: sortOrder
     });
@@ -708,6 +712,20 @@ function updateKpi() {
   if (kpiPresentEl) kpiPresentEl.textContent = `${present} чел.`;
   if (kpiAbsentEl) kpiAbsentEl.textContent = `${absent} чел.`;
 
+  // 3 Информационные карточки со статистикой (Всего / Мужчины / Девушки)
+  const statTotal = document.getElementById("statCardTotal");
+  const statMale = document.getElementById("statCardMale");
+  const statFemale = document.getElementById("statCardFemale");
+  if (statTotal) {
+    statTotal.textContent = `П/С: ${allCadets.length} чел. | В строю: ${Math.max(0, allCadets.length - allAbsences.length)} чел. | В расходе: ${allAbsences.length} чел.`;
+  }
+  if (statMale) {
+    statMale.textContent = `П/С: ${maleCadets.length} чел. | В строю: ${Math.max(0, maleCadets.length - maleAbsences.length)} чел. | В расходе: ${maleAbsences.length} чел.`;
+  }
+  if (statFemale) {
+    statFemale.textContent = `П/С: ${femaleCadets.length} чел. | В строю: ${Math.max(0, femaleCadets.length - femaleAbsences.length)} чел. | В расходе: ${femaleAbsences.length} чел.`;
+  }
+
   // Контроль сквозного математического баланса
   const balanceBanner = document.getElementById("sliceBalanceBanner");
   if (balanceBanner) {
@@ -715,10 +733,10 @@ function updateKpi() {
                           (allAbsences.length === (maleAbsences.length + femaleAbsences.length));
     if (isSumBalanced) {
       balanceBanner.className = "slice-balance-banner";
-      balanceBanner.innerHTML = `⚖️ <strong>Сквозной баланс строя подтвержден:</strong> Общий [П/С: ${allCadets.length}, В строю: ${Math.max(0, allCadets.length - allAbsences.length)}, Расход: ${allAbsences.length}] = Мужчины (${maleCadets.length}/${Math.max(0, maleCadets.length - maleAbsences.length)}/${maleAbsences.length}) + Женщины (${femaleCadets.length}/${Math.max(0, femaleCadets.length - femaleAbsences.length)}/${femaleAbsences.length}) ✓`;
+      balanceBanner.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M12 3v18"/><path d="M3 7l9-4 9 4"/><circle cx="6" cy="14" r="3"/><circle cx="18" cy="14" r="3"/></svg> <strong>Сквозной баланс строя подтвержден:</strong> Общий [П/С: ${allCadets.length}, В строю: ${Math.max(0, allCadets.length - allAbsences.length)}, Расход: ${allAbsences.length}] = Мужчины (${maleCadets.length}/${Math.max(0, maleCadets.length - maleAbsences.length)}/${maleAbsences.length}) + Женщины (${femaleCadets.length}/${Math.max(0, femaleCadets.length - femaleAbsences.length)}/${femaleAbsences.length})`;
     } else {
       balanceBanner.className = "slice-balance-banner error";
-      balanceBanner.innerHTML = `❌ <strong>Нарушение баланса:</strong> Сумма мужского и женского состава не сходится с общим!`;
+      balanceBanner.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> <strong>Нарушение баланса:</strong> Сумма мужского и женского состава не сходится с общим!`;
     }
   }
 }
@@ -833,7 +851,7 @@ function renderAbsencesTable() {
 function openWizardModal(stagingCadets) {
   state.stagingCadets = stagingCadets.map((c, i) => ({
     tempId: 't_' + (i + 1),
-    course: c.course || 1,
+    course: c.course || (getCourseFromGroup(c.group_num) !== '?' ? Number(getCourseFromGroup(c.group_num)) : 1),
     status: (c.course > 5) ? 'graduated' : 'active',
     ...c
   }));
@@ -847,6 +865,98 @@ function closeWizardModal() {
   if (modal) modal.classList.remove("active");
 }
 
+function parseGroupCode(groupCode) {
+  if (!groupCode) return { faculty: null, course: null, subgroup: null };
+  const grpStr = String(groupCode).trim();
+  const m4 = grpStr.match(/^(\d)(\d)(\d{2})$/) || grpStr.match(/(\d)(\d)(\d{2})/);
+  if (m4) {
+    return {
+      faculty: parseInt(m4[1], 10),
+      course: parseInt(m4[2], 10),
+      subgroup: m4[3]
+    };
+  }
+  const m3 = grpStr.match(/^(\d)(\d{2})$/);
+  if (m3) {
+    return {
+      faculty: null,
+      course: parseInt(m3[1], 10),
+      subgroup: m3[2]
+    };
+  }
+  return { faculty: null, course: null, subgroup: null };
+}
+
+function getCourseFromGroup(groupStr) {
+  const cleaned = String(groupStr || "").replace(/\D/g, "");
+  if (cleaned.length === 4) {
+    return cleaned[1]; // Вторая цифра — курс
+  }
+  return "?";
+}
+
+function changeGroupCourse(groupCode, targetCourse) {
+  if (!groupCode) return "";
+  const grpStr = String(groupCode).trim();
+  const targetDigit = String(parseInt(targetCourse, 10));
+
+  // 4-digit code e.g. 1280 -> 1380
+  const m4 = grpStr.match(/^(\d)(\d)(\d{2})$/);
+  if (m4) {
+    return `${m4[1]}${targetDigit}${m4[3]}`;
+  }
+  const m4InText = grpStr.match(/(\b\d)\d(\d{2}\b)/);
+  if (m4InText) {
+    return grpStr.replace(/(\b\d)\d(\d{2}\b)/, `$1${targetDigit}$2`);
+  }
+  // 3-digit code e.g. 221 -> 321
+  const m3 = grpStr.match(/^(\d)(\d{2})$/);
+  if (m3) {
+    return `${targetDigit}${m3[2]}`;
+  }
+  return grpStr;
+}
+
+function openBulkCourseModal() {
+  const modal = document.getElementById("bulkCourseModal");
+  if (modal) modal.classList.add("active");
+}
+
+function closeBulkCourseModal() {
+  const modal = document.getElementById("bulkCourseModal");
+  if (modal) modal.classList.remove("active");
+}
+
+function applyBulkCourseChange() {
+  const select = document.getElementById("bulkTargetCourseSelect");
+  if (!select) return;
+  const targetCourse = parseInt(select.value, 10);
+  if (!targetCourse || targetCourse < 1 || targetCourse > 5) return;
+
+  state.cadets.forEach(c => {
+    c.course = targetCourse;
+    if (c.group_num) {
+      c.group_num = changeGroupCourse(c.group_num, targetCourse);
+    }
+  });
+
+  state.absences.forEach(a => {
+    if (a.group_num) {
+      a.group_num = changeGroupCourse(a.group_num, targetCourse);
+    }
+  });
+
+  renderCadetsTable();
+  updateCadetGroupFilterOptions();
+  renderAbsencesTable();
+  updateKpi();
+  updateSliceStats();
+  calculateAndRenderBalance();
+  renderLivePreview();
+  closeBulkCourseModal();
+  showToast(`Курс всех групп успешно изменен на ${targetCourse} курс!`, "success");
+}
+
 function renderWizardTable() {
   const tbody = document.getElementById("wizardTableBody");
   const badge = document.getElementById("wizardSummaryBadge");
@@ -858,7 +968,7 @@ function renderWizardTable() {
   const females = state.stagingCadets.filter(c => c.gender === 'Ж' || c.gender === 'female').length;
 
   if (badge) {
-    badge.textContent = `Всего: ${total} чел. | 👨 М: ${males} | 👩 Ж: ${females}` + (graduated ? ` | ⚠️ Выпускники: ${graduated}` : '');
+    badge.textContent = `Всего: ${total} чел. | М: ${males} | Ж: ${females}` + (graduated ? ` | Выпускники: ${graduated}` : '');
   }
 
   tbody.innerHTML = "";
@@ -880,14 +990,17 @@ function renderWizardTable() {
       </td>
       <td style="text-align: center;">
         <button class="btn btn-sm" style="padding: 2px 8px; font-weight: 700; ${isFemale ? 'background: #FDF2F8; color: #BE185D; border: 1px solid #FBCFE8;' : 'background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;'}" onclick="wizardToggleGender('${c.tempId}')">
-          ${isFemale ? '👩 Ж' : '👨 М'}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:2px;">
+            ${isFemale ? '<circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>' : '<circle cx="10" cy="14" r="5"/><line x1="19" y1="5" x2="13.6" y2="10.4"/><polyline points="15 5 19 5 19 9"/>'}
+          </svg>
+          ${isFemale ? 'Ж' : 'М'}
         </button>
       </td>
       <td style="text-align: center;">
         <span class="badge ${isGraduated ? 'badge-yellow' : 'badge-green'}">${isGraduated ? 'Выпускник' : 'В строю'}</span>
       </td>
       <td>
-        ${isGraduated ? '<span style="color: #DC2626; font-size: 11px; font-weight: 600;">⚠️ Курс > 5 (выпускник)</span>' : '<span style="color: #16A34A; font-size: 11px;">✓ Норма</span>'}
+        ${isGraduated ? '<span style="color: #DC2626; font-size: 11px; font-weight: 600;">Курс > 5 (выпускник)</span>' : '<span style="color: #16A34A; font-size: 11px; font-weight: 600;">Норма</span>'}
       </td>
     `;
     tbody.appendChild(tr);
@@ -901,13 +1014,14 @@ function wizardIncrementCourseAll() {
       return {
         ...c,
         course: nextCourse,
+        group_num: nextCourse <= 5 ? changeGroupCourse(c.group_num, nextCourse) : c.group_num,
         status: nextCourse > 5 ? 'graduated' : 'active'
       };
     }
     return c;
   });
   renderWizardTable();
-  showToast("Курс всех активных курсантов увеличен на +1", "info");
+  showToast("Курс всех активных курсантов увеличен на +1. Номера групп обновлены.", "info");
 }
 
 function wizardBulkSetCourse() {
@@ -916,10 +1030,11 @@ function wizardBulkSetCourse() {
   state.stagingCadets = state.stagingCadets.map(c => ({
     ...c,
     course: targetCourse,
+    group_num: changeGroupCourse(c.group_num, targetCourse),
     status: targetCourse > 5 ? 'graduated' : 'active'
   }));
   renderWizardTable();
-  showToast(`Курс ${targetCourse} назначен всем курсантам`, "info");
+  showToast(`Курс ${targetCourse} назначен. Номера групп обновлены (2-я цифра).`, "info");
 }
 
 function wizardRemoveGraduates() {
@@ -969,7 +1084,7 @@ function confirmWizardImport() {
     fio: c.fio,
     short_fio: c.short_fio || makeShortFio(c.fio),
     group_num: c.group_num,
-    course: c.course || 1,
+    course: c.course || (getCourseFromGroup(c.group_num) !== '?' ? Number(getCourseFromGroup(c.group_num)) : 1),
     gender: (c.gender === 'female' || c.gender === 'Ж') ? 'Ж' : 'М',
     status: c.status || 'active',
     sort_order: idx
@@ -1035,6 +1150,11 @@ function renderCadetsTable() {
   const selectedGroup = filterGroupSelect ? filterGroupSelect.value.trim() : "";
 
   const filtered = state.cadets.filter(c => {
+    if (state.selectedCourseFilter && state.selectedCourseFilter !== 'all') {
+      if (Number(c.course) !== Number(state.selectedCourseFilter)) {
+        return false;
+      }
+    }
     if (selectedGroup && String(c.group_num || "").trim() !== selectedGroup) {
       return false;
     }
@@ -1052,7 +1172,7 @@ function renderCadetsTable() {
   });
 
   if (countEl) {
-    if (searchText || selectedGroup) {
+    if (searchText || selectedGroup || (state.selectedCourseFilter && state.selectedCourseFilter !== 'all')) {
       countEl.textContent = `${filtered.length} из ${state.cadets.length} чел.`;
     } else {
       countEl.textContent = `${state.cadets.length} чел.`;
@@ -1072,14 +1192,24 @@ function renderCadetsTable() {
   tbody.innerHTML = "";
 
   filtered.forEach((c, idx) => {
+    const isFemale = (c.gender === 'Ж' || c.gender === 'female');
+    const crs = getCourseFromGroup(c.group_num);
+    const crsText = crs !== "?" ? ` (${crs} к.)` : (c.course ? ` (${c.course} к.)` : "");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="col-center">${idx + 1}</td>
       <td>${escapeHtml(c.rank)}</td>
       <td><strong>${escapeHtml(c.fio)}</strong></td>
       <td>${escapeHtml(c.short_fio)}</td>
-      <td class="col-center"><span class="badge badge-gray">${escapeHtml(c.group_num)}</span></td>
-      <td class="col-center"><span class="badge ${c.gender === 'Ж' ? 'badge-purple' : 'badge-blue'}">${c.gender}</span></td>
+      <td class="col-center"><span class="badge badge-gray">${escapeHtml(c.group_num)}${crsText}</span></td>
+      <td class="col-center">
+        <button class="btn btn-sm" style="padding: 2px 8px; font-weight: 700; ${isFemale ? 'background: #FDF2F8; color: #BE185D; border: 1px solid #FBCFE8;' : 'background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;'}" onclick="toggleCadetGender(${c.id})" title="Нажмите для смены пола (М ↔ Ж)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:2px;">
+            ${isFemale ? '<circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>' : '<circle cx="10" cy="14" r="5"/><line x1="19" y1="5" x2="13.6" y2="10.4"/><polyline points="15 5 19 5 19 9"/>'}
+          </svg>
+          ${isFemale ? 'Ж' : 'М'}
+        </button>
+      </td>
       <td class="col-center" style="display: flex; gap: 6px; justify-content: center;">
         <button class="btn btn-secondary btn-sm" onclick="openEditCadetModal(${c.id})" title="Редактировать">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1091,6 +1221,33 @@ function renderCadetsTable() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+function toggleCadetGender(cadetId) {
+  const cadet = state.cadets.find(c => c.id === cadetId);
+  if (!cadet) return;
+  cadet.gender = (cadet.gender === 'Ж' ? 'М' : 'Ж');
+  state.absences.forEach(a => {
+    if (a.cadet_id === cadetId) {
+      a.gender = cadet.gender;
+    }
+  });
+  renderCadetsTable();
+  renderAbsencesTable();
+  calculateAndRenderBalance();
+  showToast(`Пол курсанта ${cadet.short_fio} изменен на ${cadet.gender}`, "info");
+}
+
+function filterCadetsByCourse(courseVal) {
+  state.selectedCourseFilter = courseVal;
+  document.querySelectorAll(".course-filter-bar .seg-btn").forEach(btn => {
+    if (btn.getAttribute("data-course") === String(courseVal)) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+  renderCadetsTable();
 }
 
 function deleteCadet(cadetId) {
@@ -1622,6 +1779,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let html = "";
     for (let i = 0; i < maxItems; i++) {
       const c = available[i];
+      const crs = getCourseFromGroup(c.group_num);
+      const crsText = crs !== "?" ? `${crs} к.` : `${c.course || 1} к.`;
       html += `
         <div class="autocomplete-item" data-id="${c.id}" data-index="${i}">
           <div class="autocomplete-item-text">
@@ -1629,7 +1788,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <strong>${escapeHtml(c.short_fio)}</strong>
             <span style="font-size: 11px; color: var(--text-light);">(${escapeHtml(c.fio)})</span>
           </div>
-          <span class="badge badge-gray">${escapeHtml(c.group_num)} взв.</span>
+          <span class="badge badge-gray">гр. ${escapeHtml(c.group_num)}, ${crsText}</span>
         </div>
       `;
     }
@@ -1648,8 +1807,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function selectCadet(c) {
     if (!c) return;
+    const crs = getCourseFromGroup(c.group_num);
+    const crsText = crs !== "?" ? `${crs} к.` : `${c.course || 1} к.`;
     cadetIdInput.value = c.id;
-    cadetInput.value = `${c.rank} ${c.short_fio} (${c.group_num} взв.)`;
+    cadetInput.value = `${c.short_fio} | ${c.rank} (гр. ${c.group_num}, ${crsText})`;
     if (cadetDropdown) cadetDropdown.classList.remove("active");
     cadetHighlightIndex = -1;
 
@@ -1763,7 +1924,7 @@ document.addEventListener("DOMContentLoaded", () => {
       html += `
         <div class="autocomplete-item custom-reason-option" data-name="${escapeHtml(query.trim())}" data-category="${autoCat}" data-index="${matched.length}">
           <div class="autocomplete-item-main" style="color: var(--primary);">
-            ✍️ Использовать «<strong>${escapeHtml(query.trim())}</strong>»
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Использовать «<strong>${escapeHtml(query.trim())}</strong>»
           </div>
           <span class="badge ${getCategoryBadgeClass(autoCat)}">${autoCat}</span>
         </div>

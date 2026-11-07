@@ -61,3 +61,38 @@ def compute_tri_slice_balance(
         male=male_slice,
         female=female_slice
     )
+
+
+def compute_gender_distribution(
+    cadets: List[Dict[str, Any]],
+    absences: List[Dict[str, Any]],
+    categories: Optional[List[str]] = None
+) -> Dict[str, Dict[str, Any]]:
+    """Computes comprehensive gender distribution stats for:
+    - Общее количество людей и общий расход (total)
+    - Количество мужчин и расход на мужчин (male)
+    - Количество женщин и расход на женщин (female)
+    """
+    bal = compute_tri_slice_balance(cadets, absences, categories=categories)
+    return {
+        "total": {
+            "listed": bal.total.listed_count,
+            "present": bal.total.present_count,
+            "absent": bal.total.absent_count,
+            "categories": bal.total.categories_breakdown
+        },
+        "male": {
+            "listed": bal.male.listed_count,
+            "present": bal.male.present_count,
+            "absent": bal.male.absent_count,
+            "categories": bal.male.categories_breakdown
+        },
+        "female": {
+            "listed": bal.female.listed_count,
+            "present": bal.female.present_count,
+            "absent": bal.female.absent_count,
+            "categories": bal.female.categories_breakdown
+        },
+        "is_balanced": bal.is_sum_balanced,
+        "error_message": bal.error_message
+    }

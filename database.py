@@ -195,12 +195,37 @@ class Database:
                 WHERE id = ?
             """, (rank, fio, short_fio, group_num, course, ru_gender, status, cadet_id))
 
+    def toggle_cadet_gender(self, cadet_id: int) -> str:
+        cadet = self.get_cadet_by_id(cadet_id)
+        if not cadet:
+            return "М"
+        current_g = cadet.get('gender', 'М')
+        new_g = "Ж" if normalize_gender(current_g) == "male" else "М"
+        with self.conn:
+            self.conn.execute("UPDATE cadets SET gender = ? WHERE id = ?", (new_g, cadet_id))
+        return new_g
+
+    def update_cadet_course(self, cadet_id: int, new_course: int, update_group: bool = True):
+        from core.parsers import change_group_course
+        cadet = self.get_cadet_by_id(cadet_id)
+        if not cadet:
+            return
+        new_group = cadet.get('group_num', '')
+        if update_group:
+            new_group = change_group_course(new_group, new_course)
+        with self.conn:
+            self.conn.execute(
+                "UPDATE cadets SET course = ?, group_num = ? WHERE id = ?",
+                (new_course, new_group, cadet_id)
+            )
+
     def delete_cadet(self, cadet_id):
         with self.conn:
             self.conn.execute("DELETE FROM daily_absences WHERE cadet_id = ?", (cadet_id,))
             self.conn.execute("DELETE FROM cadets WHERE id = ?", (cadet_id,))
 
     def clear_and_import_cadets(self, cadets_list):
+        from core.parsers import get_course_from_group, make_short_fio
         with self.conn:
             self.conn.execute("DELETE FROM daily_absences")
             self.conn.execute("DELETE FROM cadets")
@@ -209,55 +234,73 @@ class Database:
                 if isinstance(c, dict):
                     rank = c.get('rank', 'курсант')
                     fio = c['fio']
-                    short_fio = c.get('short_fio', '')
-                    group_num = c['group_num']
-                    course = c.get('course', 1)
+                    short_fio = c.get('short_fio') or make_short_fio(fio)
+                    group_num = str(c['group_num'])
+                    course = c.get('course')
+                    if not course or course == 1:
+                        cg = get_course_from_group(group_num)
+                        course = int(cg) if cg != "?" else (course or 1)
                     gender = gender_to_ru(c.get('gender', 'М'))
                     status = c.get('status', 'active')
                     sort_order = c.get('sort_order', idx)
                     prepared.append((rank, fio, short_fio, group_num, course, gender, status, sort_order))
                 elif hasattr(c, 'fio'):
                     # Pydantic or DTO object
+                    grp_str = str(c.group_num)
+                    crs = getattr(c, 'course', None)
+                    if not crs or crs == 1:
+                        cg = get_course_from_group(grp_str)
+                        crs = int(cg) if cg != "?" else (crs or 1)
+                    s_fio = getattr(c, 'short_fio', None) or make_short_fio(c.fio)
                     prepared.append((
-                        c.rank, c.fio, c.short_fio, c.group_num, getattr(c, 'course', 1),
+                        c.rank, c.fio, s_fio, grp_str, crs,
                         gender_to_ru(c.gender), getattr(c, 'status', 'active'), getattr(c, 'sort_order', idx)
                     ))
                 else:
                     sort_order = c[5] if len(c) > 5 else idx
-                    course = c[6] if len(c) > 6 else 1
+                    grp_str = str(c[3])
+                    course = c[6] if len(c) > 6 else None
+                    if not course or course == 1:
+                        cg = get_course_from_group(grp_str)
+                        course = int(cg) if cg != "?" else (course or 1)
                     status = c[7] if len(c) > 7 else 'active'
-                    prepared.append((c[0], c[1], c[2], c[3], course, gender_to_ru(c[4]), status, sort_order))
+                    s_fio = c[2] if len(c) > 2 and c[2] else make_short_fio(c[1])
+                    prepared.append((c[0], c[1], s_fio, grp_str, course, gender_to_ru(c[4]), status, sort_order))
 
             self.conn.executemany(
                 "INSERT INTO cadets (rank, fio, short_fio, group_num, course, gender, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 prepared
             )
 
-    def bulk_increment_course(self, max_course: int = 5):
+    def bulk_increment_course(self, max_course: int = 5, update_group_numbers: bool = True):
+        from core.parsers import change_group_course
         with self.conn:
-            self.conn.execute("""
-                UPDATE cadets
-                SET status = 'graduated'
-                WHERE is_active = 1 AND status = 'active' AND course >= ?
-            """, (max_course,))
-            self.conn.execute("""
-                UPDATE cadets
-                SET course = course + 1
-                WHERE is_active = 1 AND status = 'active'
-            """)
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT id, group_num, course FROM cadets WHERE is_active = 1 AND status = 'active'")
+            for cid, grp, crs in cursor.fetchall():
+                if crs >= max_course:
+                    cursor.execute("UPDATE cadets SET status = 'graduated' WHERE id = ?", (cid,))
+                else:
+                    new_crs = crs + 1
+                    new_grp = change_group_course(grp, new_crs) if update_group_numbers else grp
+                    cursor.execute("UPDATE cadets SET course = ?, group_num = ? WHERE id = ?", (new_crs, new_grp, cid))
 
-    def bulk_set_course(self, course: int, cadet_ids: Optional[List[int]] = None):
+    def bulk_set_course(self, course: int, cadet_ids: Optional[List[int]] = None, update_group_numbers: bool = True):
+        from core.parsers import change_group_course
         with self.conn:
+            cursor = self.conn.cursor()
             if cadet_ids:
                 q_marks = ",".join("?" for _ in cadet_ids)
-                self.conn.execute(
-                    f"UPDATE cadets SET course = ?, status = 'active' WHERE id IN ({q_marks})",
-                    [course] + cadet_ids
-                )
+                cursor.execute(f"SELECT id, group_num FROM cadets WHERE id IN ({q_marks})", cadet_ids)
             else:
-                self.conn.execute(
-                    "UPDATE cadets SET course = ?, status = 'active' WHERE is_active = 1",
-                    (course,)
+                cursor.execute("SELECT id, group_num FROM cadets WHERE is_active = 1")
+            rows = cursor.fetchall()
+
+            for cid, grp in rows:
+                new_grp = change_group_course(grp, course) if update_group_numbers else grp
+                cursor.execute(
+                    "UPDATE cadets SET course = ?, group_num = ?, status = 'active' WHERE id = ?",
+                    (course, new_grp, cid)
                 )
 
     def get_absence_types(self):

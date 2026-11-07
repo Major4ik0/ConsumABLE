@@ -153,16 +153,16 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
           </div>
           <div style={badgeContainerStyle}>
             <span style={badgeStyle}>Всего: {totalCount} чел.</span>
-            <span style={{ ...badgeStyle, backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>👨 М: {malesCount}</span>
-            <span style={{ ...badgeStyle, backgroundColor: '#FDF2F8', color: '#BE185D' }}>👩 Ж: {femalesCount}</span>
+            <span style={{ ...badgeStyle, backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>М: {malesCount}</span>
+            <span style={{ ...badgeStyle, backgroundColor: '#FDF2F8', color: '#BE185D' }}>Ж: {femalesCount}</span>
             {graduatedCount > 0 && (
               <span style={{ ...badgeStyle, backgroundColor: '#FEF3C7', color: '#B45309' }}>
-                ⚠️ Выпускников: {graduatedCount}
+                Выпускников: {graduatedCount}
               </span>
             )}
             {reviewCount > 0 && (
               <span style={{ ...badgeStyle, backgroundColor: '#FFFBEB', color: '#D97706' }}>
-                🔍 Проверить пол: {reviewCount}
+                Проверить пол: {reviewCount}
               </span>
             )}
           </div>
@@ -172,7 +172,7 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
         <div style={toolbarStyle}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button style={primaryBtnStyle} onClick={handleIncrementCourseAll}>
-              ⏩ +1 курс всем (Перевод на след. год)
+              +1 курс всем (Перевод на след. год)
             </button>
 
             <span style={{ color: '#CBD5E1' }}>|</span>
@@ -195,12 +195,12 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
 
             {graduatedCount > 0 && (
               <button style={warningBtnStyle} onClick={handleRemoveGraduates}>
-                🎓 Исключить выпускников ({graduatedCount})
+                Исключить выпускников ({graduatedCount})
               </button>
             )}
 
             <button style={purpleBtnStyle} onClick={() => handleToggleGender()}>
-              ⚧ Переключить пол выделенным
+              Переключить пол (М/Ж)
             </button>
           </div>
         </div>
@@ -278,7 +278,7 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
                         }}
                         onClick={() => handleToggleGender(c.temp_id)}
                       >
-                        {isFemale ? '👩 Ж' : '👨 М'}
+                        {isFemale ? 'Ж' : 'М'}
                       </button>
                     </td>
                     {/* Status */}
@@ -297,10 +297,10 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
                     <td style={tdStyle}>
                       {c.warnings.length > 0 ? (
                         <span style={{ color: '#DC2626', fontSize: 12, fontWeight: 500 }}>
-                          ⚠️ {c.warnings.join('; ')}
+                          {c.warnings.join('; ')}
                         </span>
                       ) : (
-                        <span style={{ color: '#16A34A', fontSize: 12 }}>✓ Норма</span>
+                        <span style={{ color: '#16A34A', fontSize: 12 }}>Норма</span>
                       )}
                     </td>
                   </tr>
@@ -313,7 +313,7 @@ export const ImportPreviewModal: React.FC<ImportPreviewModalProps> = ({
         {/* Footer Actions */}
         <div style={footerStyle}>
           <div style={{ fontSize: 12, color: '#64748B' }}>
-            💡 <i>Вы можете менять курс и пол прямо в ячейках таблицы перед сохранением.</i>
+            <i>Вы можете менять курс и пол прямо в ячейках таблицы перед сохранением.</i>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button style={secondaryBtnStyle} onClick={onClose}>

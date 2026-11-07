@@ -6,10 +6,14 @@ from core.parsers import (
     detect_gender as core_detect_gender,
     detect_gender_with_flag,
     parse_roster_excel,
-    parse_cadets_sheet
+    parse_cadets_sheet,
+    parse_group_code,
+    change_group_course,
+    get_course_from_group
 )
 from core.models import gender_to_ru, normalize_gender
 from core.exporter import export_report_to_excel, style_range
+from core.balance import calculate_slice_metrics, compute_tri_slice_balance
 
 
 def detect_gender(fio: str, explicit_val=None) -> str:
