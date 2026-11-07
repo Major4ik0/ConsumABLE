@@ -416,7 +416,7 @@ class BulkCourseDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ConsumABLE v1.3.4 — Управление строевой запиской")
+        self.setWindowTitle("ConsumABLE v1.3.5 — Управление строевой запиской")
         self.resize(1200, 840)
         self.db = Database()
 
@@ -464,7 +464,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        status_left = QLabel("ConsumABLE v1.3.4 • Система автоматизации строевого учета")
+        status_left = QLabel("ConsumABLE v1.3.5 • Система автоматизации строевого учета")
         status_bar.addWidget(status_left)
 
         author_widget = QWidget()
@@ -910,7 +910,7 @@ class MainWindow(QMainWindow):
         about_header.addStretch()
         about_layout.addLayout(about_header)
 
-        lbl_app_name = QLabel("ConsumABLE v1.3.4")
+        lbl_app_name = QLabel("ConsumABLE v1.3.5")
         lbl_app_name.setStyleSheet("font-size: 14px; font-weight: 700; color: #2563EB;")
         about_layout.addWidget(lbl_app_name)
 

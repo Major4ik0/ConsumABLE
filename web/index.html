@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConsumABLE v1.3.4 — Управление строевой запиской</title>
+  <title>ConsumABLE v1.3.5 — Управление строевой запиской</title>
   <link rel="stylesheet" href="style.css">
   <!-- SheetJS (xlsx) для быстрого чтения и парсинга базы курсантов -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -27,7 +27,7 @@
         <div>
           <div class="brand-title">
             ConsumABLE
-            <span class="brand-badge">v1.3.4</span>
+            <span class="brand-badge">v1.3.5</span>
           </div>
           <div class="brand-subtitle">Автономное управление строевой запиской курса</div>
         </div>
@@ -53,7 +53,7 @@
           Загрузить базу (.xlsx)
         </button>
 
-        <button class="btn btn-danger" onclick="resetAllData()" title="Очистить память вкладки">
+        <button id="btn-reset" class="btn btn-danger" onclick="handleResetAll()" title="Очистить память вкладки">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3 6 5 6 21 6"/>
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -136,20 +136,20 @@
         <div class="grid-4">
           <div class="form-group">
             <label class="form-label" for="reportDate">Дата расхода</label>
-            <input type="date" id="reportDate" class="form-input">
+            <input type="date" id="reportDate" name="report_date" class="form-input">
           </div>
           <div class="form-group">
             <label class="form-label" for="unitTitle">Наименование подразделения</label>
-            <input type="text" id="unitTitle" class="form-input" placeholder="Например: 3 курс 1 факультета...">
+            <input type="text" id="unitTitle" name="unit_name" class="form-input" value="" placeholder="Например: 3 курс 1 факультета...">
           </div>
           <div class="form-group">
             <label class="form-label" for="chiefTitle">Должность начальника</label>
-            <input type="text" id="chiefTitle" class="form-input" placeholder="Например: Начальник 3 курса 1 факультета">
+            <input type="text" id="chiefTitle" name="unit_position" class="form-input" value="" placeholder="Например: Начальник 3 курса 1 факультета">
           </div>
           <div class="form-group">
             <label class="form-label" for="commanderRank">В/звание начальника</label>
-            <select id="commanderRank" class="form-select">
-              <option value="">Выберите звание</option>
+            <select id="commanderRank" name="commander_rank" class="form-select">
+              <option value="" selected>Выберите звание...</option>
               <option value="майор">майор</option>
               <option value="капитан">капитан</option>
               <option value="подполковник">подполковник</option>
@@ -169,8 +169,8 @@
           </div>
           <div class="form-group">
             <label class="form-label" for="commanderName">Фамилия и инициалы</label>
-            <input type="text" id="commanderName" class="form-input" placeholder="Фамилия И.О.">
-            <input type="hidden" id="chiefName">
+            <input type="text" id="commanderName" name="commander_name" class="form-input" value="" placeholder="Фамилия И.О.">
+            <input type="hidden" id="chiefName" name="chief_name" value="">
           </div>
         </div>
       </div>
@@ -605,7 +605,7 @@
 
     <!-- Подвал приложения с информацией об авторе -->
     <footer class="app-footer">
-      <span>ConsumABLE v1.3.4</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
+      <span>ConsumABLE v1.3.5</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
     </footer>
 
   </main>

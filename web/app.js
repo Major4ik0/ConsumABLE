@@ -5,14 +5,43 @@
  * не используют localStorage / sessionStorage / IndexedDB и никуда не передаются.
  */
 
+function sanitizeStorage() {
+  try {
+    const piiPattern = new RegExp('\u043c\u0435\u0434\u043a\u043e\u0432', 'i');
+    if (typeof localStorage !== 'undefined') {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        const val = localStorage.getItem(key) || "";
+        if (piiPattern.test(key) || piiPattern.test(val)) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (!key) continue;
+        const val = sessionStorage.getItem(key) || "";
+        if (piiPattern.test(key) || piiPattern.test(val)) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Storage sanitation error:", e);
+  }
+}
+sanitizeStorage();
+
 // 1. ИСХОДНОЕ СОСТОЯНИЕ (IN-MEMORY STATE)
 const state = {
   settings: {
     reportDate: getTodayDateString(),
     unitTitle: "* курс * факультета (автоматизированных систем управления)",
-    chiefTitle: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title')) || "Начальник * курса * факультета",
-    commanderRank: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "",
-    commanderName: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "",
+    chiefTitle: "Начальник * курса * факультета",
+    commanderRank: "",
+    commanderName: "",
     chiefName: ""
   },
   cadets: [],
@@ -2038,73 +2067,129 @@ function saveCadetModal() {
 
 // 7. СБРОС ВСЕХ ДАННЫХ (ZERO PERSISTENCE CLEAR)
 
-function resetAllData() {
-  if (!confirm("Внимание! Вы действительно хотите очистить все списки и текущий расход? Все данные сессии будут удалены из памяти браузера.")) {
-    return;
+function handleResetAll() {
+  // 1. Очистка хранилищ браузера
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.clear();
+    if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+  } catch (e) {
+    console.error("Storage clear error:", e);
   }
 
+  // 2. Очистка структур данных в памяти
   state.cadets = [];
   state.absences = [];
-  state.settings.reportDate = getTodayDateString();
-  state.settings.unitTitle = "* курс * факультета (автоматизированных систем управления)";
-  state.settings.chiefTitle = "Начальник * курса * факультета";
+  state.settings.unitTitle = "";
+  state.settings.chiefTitle = "";
   state.settings.commanderRank = "";
   state.settings.commanderName = "";
   state.settings.chiefName = "";
 
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('consumable_commander_rank');
-    localStorage.removeItem('consumable_commander_name');
-    localStorage.removeItem('consumable_chief_title');
+  if (typeof window !== 'undefined') {
+    window.roster = [];
+    window.expenses = [];
+    window.currentCourse = null;
   }
+
+  // 3. ПРИНУДИТЕЛЬНАЯ ручная очистка всех инпутов шапки
+  const commanderNameInput = document.getElementById('commanderName') || 
+                             document.getElementById('commander-name') || 
+                             document.querySelector('input[name="commander_name"]');
+  if (commanderNameInput) commanderNameInput.value = '';
+
+  const commanderRankSelect = document.getElementById('commanderRank') || 
+                              document.getElementById('commander-rank') || 
+                              document.querySelector('select[name="commander_rank"]');
+  if (commanderRankSelect) {
+    commanderRankSelect.selectedIndex = 0;
+    commanderRankSelect.value = '';
+  }
+
+  const unitNameInput = document.getElementById('unitTitle') || 
+                        document.getElementById('unit-name') || 
+                        document.querySelector('input[name="unit_name"]');
+  if (unitNameInput) unitNameInput.value = '';
+
+  const unitPositionInput = document.getElementById('chiefTitle') || 
+                            document.getElementById('unit-position') || 
+                            document.querySelector('input[name="unit_position"]');
+  if (unitPositionInput) unitPositionInput.value = '';
+
+  const chiefNameInput = document.getElementById('chiefName');
+  if (chiefNameInput) chiefNameInput.value = '';
+
+  const fileInput = document.getElementById('excelFileInput');
+  if (fileInput) fileInput.value = '';
+
   syncChiefName();
 
-  const reportDateEl = document.getElementById("reportDate");
-  if (reportDateEl) reportDateEl.value = state.settings.reportDate;
-  const unitTitleEl = document.getElementById("unitTitle");
-  if (unitTitleEl) unitTitleEl.value = state.settings.unitTitle;
-  const chiefTitleEl = document.getElementById("chiefTitle");
-  if (chiefTitleEl) chiefTitleEl.value = state.settings.chiefTitle;
-  const rankEl = document.getElementById("commanderRank");
-  if (rankEl) rankEl.value = "";
-  const nameEl = document.getElementById("commanderName");
-  if (nameEl) nameEl.value = "";
+  // 4. Сброс счетчиков и перерисовка UI
+  updateCounters();
+  renderRosterTable();
+  renderSummaryPreview();
 
+  showToast("Все данные сессии и параметры успешно очищены", "success");
+}
+
+function updateCounters() {
   updateKpi();
+}
+
+function renderRosterTable() {
   updateCadetGroupFilterOptions();
-  renderAbsencesTable();
   renderCadetsTable();
   updateCadetSelectOptions();
-  renderLivePreview();
-
-  showToast("Все данные сессии успешно удалены из памяти", "success");
+  renderAbsencesTable();
 }
+
+function renderSummaryPreview() {
+  renderLivePreview();
+}
+
+function resetAllData() {
+  handleResetAll();
+}
+
+window.handleResetAll = handleResetAll;
+window.resetAllData = handleResetAll;
+window.updateCounters = updateCounters;
+window.renderRosterTable = renderRosterTable;
+window.renderSummaryPreview = renderSummaryPreview;
 
 // 8. ИНИЦИАЛИЗАЦИЯ И СЛУШАТЕЛИ СОБЫТИЙ
 
 document.addEventListener("DOMContentLoaded", () => {
+  // 1. Очистка от возможного кэширования PII при загрузке страницы
+  sanitizeStorage();
+
   // Инициализация полей параметров
   const reportDateEl = document.getElementById("reportDate");
-  const unitTitleEl = document.getElementById("unitTitle");
-  const chiefTitleEl = document.getElementById("chiefTitle");
-  const commanderRankEl = document.getElementById("commanderRank");
-  const commanderNameEl = document.getElementById("commanderName");
+  const unitTitleEl = document.getElementById("unitTitle") || document.getElementById("unit-name") || document.querySelector('input[name="unit_name"]');
+  const chiefTitleEl = document.getElementById("chiefTitle") || document.getElementById("unit-position") || document.querySelector('input[name="unit_position"]');
+  const commanderRankEl = document.getElementById("commanderRank") || document.getElementById("commander-rank") || document.querySelector('select[name="commander_rank"]');
+  const commanderNameEl = document.getElementById("commanderName") || document.getElementById("commander-name") || document.querySelector('input[name="commander_name"]');
+  const resetBtn = document.getElementById("btn-reset") || document.querySelector(".btn-danger");
 
-  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "";
-  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "";
-  const savedTitle = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title'));
+  // Данные начальника (звание и фамилия) строго пустые при старте страницы
+  state.settings.commanderRank = "";
+  state.settings.commanderName = "";
+  state.settings.chiefName = "";
 
-  state.settings.commanderRank = savedRank;
-  if (commanderRankEl) commanderRankEl.value = savedRank;
-
-  state.settings.commanderName = savedName;
-  if (commanderNameEl) commanderNameEl.value = savedName;
-
-  if (savedTitle) {
-    state.settings.chiefTitle = savedTitle;
-    if (chiefTitleEl) chiefTitleEl.value = savedTitle;
+  if (commanderRankEl) {
+    commanderRankEl.selectedIndex = 0;
+    commanderRankEl.value = "";
+  }
+  if (commanderNameEl) {
+    commanderNameEl.value = "";
   }
   syncChiefName();
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", e => {
+      e.preventDefault();
+      handleResetAll();
+    });
+  }
 
   if (reportDateEl) {
     reportDateEl.value = state.settings.reportDate;
