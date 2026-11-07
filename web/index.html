@@ -160,9 +160,9 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            <span class="stat-slice-title">Общий состав (Всего)</span>
+            <span class="stat-slice-title">Общий состав</span>
           </div>
-          <div id="statCardTotal" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+          <div id="statCardTotal" class="stat-slice-val">По списку: 0 | В строю: 0 | На расходе: 0</div>
         </div>
 
         <div class="stat-slice-card male">
@@ -172,7 +172,7 @@
             </svg>
             <span class="stat-slice-title">Мужской состав (Парни)</span>
           </div>
-          <div id="statCardMale" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+          <div id="statCardMale" class="stat-slice-val">По списку: 0 | В строю: 0 | На расходе: 0</div>
         </div>
 
         <div class="stat-slice-card female">
@@ -182,7 +182,7 @@
             </svg>
             <span class="stat-slice-title">Женский состав (Девушки)</span>
           </div>
-          <div id="statCardFemale" class="stat-slice-val">П/С: 0 | В строю: 0 | В расходе: 0</div>
+          <div id="statCardFemale" class="stat-slice-val">По списку: 0 | В строю: 0 | На расходе: 0</div>
         </div>
       </div>
 
@@ -544,6 +544,60 @@
     </div>
 
   </main>
+
+  <!-- Модальное окно выбора курса при импорте Excel -->
+  <div id="importCourseModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <svg style="width: 20px; height: 20px; color: var(--primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Импорт списка личного состава
+        </div>
+        <button class="modal-close" onclick="closeImportCourseModal()">
+          <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 14px; color: var(--text-main); font-weight: 700; margin-bottom: 6px;">
+          Какой курс установить для загружаемых групп?
+        </p>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.4;">
+          При выборе курса у всех 4-значных номеров групп (например, 1280) вторая цифра будет автоматически заменена на выбранный курс (станет 1380).
+        </p>
+
+        <div class="course-choice-grid">
+          <button type="button" class="course-choice-btn" data-course="1" onclick="selectImportCourse(1)">1 курс</button>
+          <button type="button" class="course-choice-btn" data-course="2" onclick="selectImportCourse(2)">2 курс</button>
+          <button type="button" class="course-choice-btn selected" data-course="3" onclick="selectImportCourse(3)">3 курс</button>
+          <button type="button" class="course-choice-btn" data-course="4" onclick="selectImportCourse(4)">4 курс</button>
+          <button type="button" class="course-choice-btn" data-course="5" onclick="selectImportCourse(5)">5 курс</button>
+          <button type="button" class="course-choice-btn" data-course="keep" onclick="selectImportCourse('keep')">Оставить как в файле</button>
+        </div>
+
+        <div id="importCourseHint" style="font-size: 12px; font-weight: 600; color: var(--primary); text-align: center; margin-top: 8px;">
+          Выбран: 3 курс (группа 1280 станет 1380)
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeImportCourseModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="confirmImportWithCourse()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Загрузить в базу
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Модальное окно массового перевода курса -->
   <div id="bulkCourseModal" class="modal-backdrop">

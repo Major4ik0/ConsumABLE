@@ -87,6 +87,7 @@ function makeShortFio(fullName) {
 
 /**
  * Автоопределение пола курсанта по окончаниям отчества/фамилии или явному полю
+ * По спецификации: -вич, -ич, -лы, -оглы -> М; -вна, -чна, -кызы -> Ж; по умолчанию -> М
  */
 function detectGender(fio, explicitVal) {
   if (explicitVal !== undefined && explicitVal !== null && String(explicitVal).trim()) {
@@ -98,22 +99,27 @@ function detectGender(fio, explicitVal) {
       return 'М';
     }
   }
-  const parts = String(fio || '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 3) {
-    const patronymic = parts[2].toLowerCase();
-    if (patronymic.endsWith('на')) {
+
+  const fullLower = String(fio || '').trim().toLowerCase();
+  if (fullLower.includes('кызы') || fullLower.endsWith('-кызы')) {
+    return 'Ж';
+  }
+  if (fullLower.includes('оглы') || fullLower.endsWith('-оглы')) {
+    return 'М';
+  }
+
+  const parts = fullLower.split(/\s+/).filter(Boolean);
+  // Проверяем каждое слово начиная со второго (отчество может стоять 2-м или 3-м словом)
+  for (let i = 1; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.endsWith('вна') || p.endsWith('чна') || p.endsWith('кызы')) {
       return 'Ж';
     }
-    if (patronymic.endsWith('ич') || patronymic.endsWith('ыч')) {
+    if (p.endsWith('вич') || p.endsWith('ич') || p.endsWith('лы') || p.endsWith('оглы')) {
       return 'М';
     }
   }
-  if (parts.length > 0) {
-    const surname = parts[0].toLowerCase();
-    if (surname.endsWith('а') || surname.endsWith('я')) {
-      return 'Ж';
-    }
-  }
+
   return 'М';
 }
 
@@ -310,17 +316,7 @@ function applyStyleToRange(ws, topRow, leftCol, bottomRow, rightCol, { font, ali
   }
 }
 
-async function generateExcelReport() {
-  if (state.cadets.length === 0) {
-    showToast("Сначала загрузите базу личного состава!", "danger");
-    return;
-  }
-
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "ConsumABLE Web";
-  wb.created = new Date();
-  const ws = wb.addWorksheet("Расход");
-
+function buildExcelSheet(ws, sheetTitleSuffix, cadets, absences, categories) {
   const boldFont = { name: "Times New Roman", size: 12, bold: true };
   const normFont = { name: "Times New Roman", size: 12 };
   const titleFont = { name: "Times New Roman", size: 12, bold: true };
@@ -341,8 +337,9 @@ async function generateExcelReport() {
   const centerAlign = { horizontal: "center", vertical: "middle", wrapText: true };
 
   // 1. Заголовки (строки 2-4)
+  const fullTitle = ("РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА " + (sheetTitleSuffix || "")).trim();
   ws.mergeCells("B2:L2");
-  ws.getCell("B2").value = "РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА";
+  ws.getCell("B2").value = fullTitle;
   applyStyleToRange(ws, 2, 2, 2, 12, { font: titleFont, alignment: centerAlign });
 
   ws.mergeCells("B3:L3");
@@ -355,18 +352,12 @@ async function generateExcelReport() {
   applyStyleToRange(ws, 4, 2, 4, 12, { font: normFont, alignment: centerAlign });
   ws.getRow(4).height = 17.0;
 
-  // 2. Определение категорий для сводки
-  const standardCategories = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"];
-  const activeAbsenceCategories = [...new Set(state.absences.map(a => a.category))];
-  const orderedCats = standardCategories.filter(c => activeAbsenceCategories.includes(c) || true); // Все стандартные
-  const otherCats = activeAbsenceCategories.filter(c => !standardCategories.includes(c));
-  const categories = [...orderedCats, ...otherCats];
-
-  // Группы по порядку добавления / sort_order
+  // 2. Группы по порядку добавления / sort_order
   const groupOrderMap = {};
-  state.cadets.forEach(c => {
-    if (!(c.group_num in groupOrderMap)) {
-      groupOrderMap[c.group_num] = c.sort_order || 0;
+  cadets.forEach(c => {
+    const grp = c.group_num || "1";
+    if (!(grp in groupOrderMap)) {
+      groupOrderMap[grp] = c.sort_order || 0;
     }
   });
   const groups = Object.keys(groupOrderMap).sort((a, b) => groupOrderMap[a] - groupOrderMap[b]);
@@ -377,6 +368,8 @@ async function generateExcelReport() {
   const headers = ["№ п/п", "Подразд.", "П/С", "Н/Л", ...categories];
   const v_col1 = 2 + headers.length;
   const v_col2 = v_col1 + 1;
+  const v_col1_letter = getColumnLetter(v_col1);
+  const v_col2_letter = getColumnLetter(v_col2);
 
   // Заголовки сводной таблицы
   headers.forEach((h, idx) => {
@@ -399,50 +392,47 @@ async function generateExcelReport() {
     alignment: centerAlign
   });
 
+  const first_cat_col = 6;
+  const last_cat_col = first_cat_col + categories.length - 1;
+  const first_cat_letter = getColumnLetter(first_cat_col);
+  const last_cat_letter = getColumnLetter(last_cat_col);
+
   let currRow = startRow + 1;
-  let totalPs = 0;
-  let totalNl = 0;
-  const catTotals = {};
-  categories.forEach(cat => { catTotals[cat] = 0; });
+  const first_grp_row = currRow;
 
   // Строки подразделений
   groups.forEach((grp, idx) => {
     ws.getRow(currRow).height = 17.0;
-    const grpCadets = state.cadets.filter(c => c.group_num === grp);
+    const grpCadets = cadets.filter(c => String(c.group_num) === String(grp));
     const ps = grpCadets.length;
-    const grpAbs = state.absences.filter(a => a.group_num === grp);
+    const grpAbs = absences.filter(a => String(a.group_num) === String(grp));
 
     const rowCounts = {};
     categories.forEach(cat => {
-      const cnt = grpAbs.filter(a => a.category === cat).length;
-      rowCounts[cat] = cnt;
-      catTotals[cat] += cnt;
+      rowCounts[cat] = grpAbs.filter(a => a.category === cat).length;
     });
 
-    const grpAbsTotal = grpAbs.length;
-    const nl = ps - grpAbsTotal;
-    totalPs += ps;
-    totalNl += nl;
+    ws.getCell(currRow, 2).value = idx + 1;
+    ws.getCell(currRow, 3).value = grp;
+    ws.getCell(currRow, 4).value = ps;
+    ws.getCell(currRow, 5).value = {
+      formula: `D${currRow}-${v_col1_letter}${currRow}`,
+      result: ps - grpAbs.length
+    };
 
-    const rowVals = [
-      idx + 1,
-      grp,
-      ps,
-      nl,
-      ...categories.map(cat => rowCounts[cat] > 0 ? rowCounts[cat] : "")
-    ];
-
-    rowVals.forEach((val, c_i) => {
-      const cell = ws.getCell(currRow, 2 + c_i);
-      cell.value = val;
-      cell.font = normFont;
-      cell.border = thinBorder;
-      cell.alignment = centerAlign;
+    categories.forEach((cat, c_offset) => {
+      const colNum = first_cat_col + c_offset;
+      const cVal = rowCounts[cat] > 0 ? rowCounts[cat] : null;
+      ws.getCell(currRow, colNum).value = cVal;
     });
 
     ws.mergeCells(currRow, v_col1, currRow, v_col2);
-    ws.getCell(currRow, v_col1).value = grpAbsTotal > 0 ? grpAbsTotal : "";
-    applyStyleToRange(ws, currRow, v_col1, currRow, v_col2, {
+    ws.getCell(currRow, v_col1).value = {
+      formula: `SUM(${first_cat_letter}${currRow}:${last_cat_letter}${currRow})`,
+      result: grpAbs.length
+    };
+
+    applyStyleToRange(ws, currRow, 2, currRow, v_col2, {
       font: normFont,
       border: thinBorder,
       alignment: centerAlign
@@ -451,84 +441,109 @@ async function generateExcelReport() {
     currRow++;
   });
 
-  // Строки «Мужчины» и «Женщины»
-  const genderConfigs = [
-    { label: "Мужчины", val: "М", numIdx: groups.length + 1 },
-    { label: "Женщины", val: "Ж", numIdx: groups.length + 2 }
-  ];
+  const last_grp_row = groups.length > 0 ? currRow - 1 : currRow;
 
-  genderConfigs.forEach(g => {
-    ws.getRow(currRow).height = 17.0;
-    const gCadets = state.cadets.filter(c => c.gender === g.val);
-    const gPs = gCadets.length;
-    const gAbs = state.absences.filter(a => a.gender === g.val);
-    const gNl = gPs - gAbs.length;
+  // Строки раздельного расхода (Мужчины / Женщины), если на листе представлены оба пола
+  const hasMales = cadets.some(c => c.gender === 'М' || c.gender === 'male');
+  const hasFemales = cadets.some(c => c.gender === 'Ж' || c.gender === 'female');
 
-    const rowCounts = {};
-    categories.forEach(cat => {
-      rowCounts[cat] = gAbs.filter(a => a.category === cat).length;
-    });
-
-    const gVals = [
-      g.numIdx,
-      g.label,
-      gPs,
-      gNl,
-      ...categories.map(cat => rowCounts[cat] > 0 ? rowCounts[cat] : "")
+  if (hasMales && hasFemales) {
+    const genderConfigs = [
+      { label: "Расход личного состава (Мужчины / Юноши)", val: "М", val2: "male", numIdx: groups.length + 1 },
+      { label: "Расход личного состава (Женщины / Девушки)", val: "Ж", val2: "female", numIdx: groups.length + 2 }
     ];
 
-    gVals.forEach((val, c_i) => {
-      const cell = ws.getCell(currRow, 2 + c_i);
-      cell.value = val;
-      cell.font = normFont;
-      cell.border = thinBorder;
-      cell.alignment = centerAlign;
+    genderConfigs.forEach(g => {
+      ws.getRow(currRow).height = 17.0;
+      const gCadets = cadets.filter(c => c.gender === g.val || c.gender === g.val2);
+      const gPs = gCadets.length;
+      const gAbs = absences.filter(a => a.gender === g.val || a.gender === g.val2);
+      const rowCounts = {};
+      categories.forEach(cat => {
+        rowCounts[cat] = gAbs.filter(a => a.category === cat).length;
+      });
+
+      ws.getCell(currRow, 2).value = g.numIdx;
+      ws.getCell(currRow, 3).value = g.label;
+      ws.getCell(currRow, 4).value = gPs;
+      ws.getCell(currRow, 5).value = {
+        formula: `D${currRow}-${v_col1_letter}${currRow}`,
+        result: gPs - gAbs.length
+      };
+
+      categories.forEach((cat, c_offset) => {
+        const colNum = first_cat_col + c_offset;
+        const cVal = rowCounts[cat] > 0 ? rowCounts[cat] : null;
+        ws.getCell(currRow, colNum).value = cVal;
+      });
+
+      ws.mergeCells(currRow, v_col1, currRow, v_col2);
+      ws.getCell(currRow, v_col1).value = {
+        formula: `SUM(${first_cat_letter}${currRow}:${last_cat_letter}${currRow})`,
+        result: gAbs.length
+      };
+
+      applyStyleToRange(ws, currRow, 2, currRow, v_col2, {
+        font: normFont,
+        border: thinBorder,
+        alignment: centerAlign
+      });
+
+      currRow++;
     });
+  }
 
-    ws.mergeCells(currRow, v_col1, currRow, v_col2);
-    ws.getCell(currRow, v_col1).value = gAbs.length > 0 ? gAbs.length : "";
-    applyStyleToRange(ws, currRow, v_col1, currRow, v_col2, {
-      font: normFont,
-      border: thinBorder,
-      alignment: centerAlign
-    });
-
-    currRow++;
-  });
-
-  // Строка «Всего»
+  // Строка «ИТОГО общий расход» с динамическими формулами
   ws.getRow(currRow).height = 18.0;
-  const totalAbsAll = Object.values(catTotals).reduce((sum, v) => sum + v, 0);
-  const summaryVals = [
-    groups.length + 3,
-    "Всего",
-    totalPs,
-    totalNl,
-    ...categories.map(c => catTotals[c] > 0 ? catTotals[c] : "")
-  ];
+  const totalNumIdx = (hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
+  ws.getCell(currRow, 2).value = totalNumIdx;
+  ws.getCell(currRow, 3).value = "ИТОГО общий расход";
 
-  summaryVals.forEach((val, c_i) => {
-    const cell = ws.getCell(currRow, 2 + c_i);
-    cell.value = val;
-    cell.font = boldFont;
-    cell.border = thinBorder;
-    cell.alignment = centerAlign;
-  });
+  if (groups.length > 0) {
+    const totalPsVal = cadets.length;
+    const totalAbsVal = absences.length;
+    const totalNlVal = totalPsVal - totalAbsVal;
 
-  ws.mergeCells(currRow, v_col1, currRow, v_col2);
-  ws.getCell(currRow, v_col1).value = totalAbsAll > 0 ? totalAbsAll : "";
-  applyStyleToRange(ws, currRow, v_col1, currRow, v_col2, {
+    ws.getCell(currRow, 4).value = {
+      formula: `SUM(D${first_grp_row}:D${last_grp_row})`,
+      result: totalPsVal
+    };
+    ws.getCell(currRow, 5).value = {
+      formula: `SUM(E${first_grp_row}:E${last_grp_row})`,
+      result: totalNlVal
+    };
+
+    categories.forEach((cat, c_offset) => {
+      const colLetter = getColumnLetter(first_cat_col + c_offset);
+      const catCount = absences.filter(a => a.category === cat).length;
+      ws.getCell(currRow, first_cat_col + c_offset).value = {
+        formula: `SUM(${colLetter}${first_grp_row}:${colLetter}${last_grp_row})`,
+        result: catCount
+      };
+    });
+
+    ws.mergeCells(currRow, v_col1, currRow, v_col2);
+    ws.getCell(currRow, v_col1).value = {
+      formula: `SUM(${first_cat_letter}${currRow}:${last_cat_letter}${currRow})`,
+      result: totalAbsVal
+    };
+  } else {
+    ws.getCell(currRow, 4).value = 0;
+    ws.getCell(currRow, 5).value = 0;
+    ws.mergeCells(currRow, v_col1, currRow, v_col2);
+    ws.getCell(currRow, v_col1).value = 0;
+  }
+
+  applyStyleToRange(ws, currRow, 2, currRow, v_col2, {
     font: boldFont,
     border: thinBorder,
     alignment: centerAlign
   });
 
-  currRow++;
-  ws.getRow(currRow).height = 14.0;
-  currRow++;
+  currRow += 2;
 
   // 3. Список отсутствующих
-  const lastColLetter = getColumnLetter(v_col2);
+  const lastColLetter = v_col2_letter;
   ws.mergeCells(`B${currRow}:${lastColLetter}${currRow}`);
   ws.getCell(`B${currRow}`).value = "Отсутствующие";
   applyStyleToRange(ws, currRow, 2, currRow, v_col2, { font: normFont, alignment: centerAlign });
@@ -560,7 +575,7 @@ async function generateExcelReport() {
   currRow++;
 
   // Строки отсутствующих
-  state.absences.forEach((a, idx) => {
+  absences.forEach((a, idx) => {
     ws.getRow(currRow).height = 18.0;
 
     const cNum = ws.getCell(currRow, 2);
@@ -570,21 +585,21 @@ async function generateExcelReport() {
     cNum.alignment = centerAlign;
 
     const cRank = ws.getCell(currRow, 3);
-    cRank.value = a.rank;
+    cRank.value = a.rank || "курсант";
     cRank.font = normFont;
     cRank.border = thinBorder;
     cRank.alignment = centerAlign;
 
     ws.mergeCells(currRow, 4, currRow, 6);
-    ws.getCell(currRow, 4).value = a.short_fio;
+    ws.getCell(currRow, 4).value = a.short_fio || a.fio || "";
     applyStyleToRange(ws, currRow, 4, currRow, 6, { font: normFont, border: thinBorder, alignment: centerAlign });
 
     ws.mergeCells(currRow, 7, currRow, 8);
-    ws.getCell(currRow, 7).value = a.type_name;
+    ws.getCell(currRow, 7).value = a.type_name || "";
     applyStyleToRange(ws, currRow, 7, currRow, 8, { font: normFont, border: thinBorder, alignment: centerAlign });
 
     const cGrp = ws.getCell(currRow, 9);
-    cGrp.value = a.group_num;
+    cGrp.value = a.group_num || "";
     cGrp.font = normFont;
     cGrp.border = thinBorder;
     cGrp.alignment = centerAlign;
@@ -627,7 +642,7 @@ async function generateExcelReport() {
     ws.getColumn(Number(colIdx)).width = width;
   });
 
-  // 6. Параметры страницы для идеальной печати на лист А4 (1-в-1 с openpyxl)
+  // 6. Параметры страницы для печати на лист А4 (1-в-1 с openpyxl)
   ws.pageSetup = {
     orientation: "portrait",
     paperSize: 9, // A4
@@ -645,6 +660,40 @@ async function generateExcelReport() {
     },
     printArea: `B2:${lastColLetter}${currRow}`
   };
+}
+
+async function generateExcelReport() {
+  if (state.cadets.length === 0) {
+    showToast("Сначала загрузите базу личного состава!", "danger");
+    return;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "ConsumABLE Web";
+  wb.created = new Date();
+
+  // Определение категорий для сводки
+  const standardCategories = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"];
+  const activeAbsenceCategories = [...new Set(state.absences.map(a => a.category))];
+  const orderedCats = standardCategories.filter(c => activeAbsenceCategories.includes(c) || true);
+  const otherCats = activeAbsenceCategories.filter(c => !standardCategories.includes(c));
+  const categories = [...orderedCats, ...otherCats];
+
+  // Лист 1: «Сводный расход»
+  const wsTotal = wb.addWorksheet("Сводный расход");
+  buildExcelSheet(wsTotal, "", state.cadets, state.absences, categories);
+
+  // Лист 2: «Мужской состав»
+  const maleCadets = state.cadets.filter(c => c.gender === 'М' || c.gender === 'male');
+  const maleAbsences = state.absences.filter(a => a.gender === 'М' || a.gender === 'male');
+  const wsMale = wb.addWorksheet("Мужской состав");
+  buildExcelSheet(wsMale, "(Мужской состав)", maleCadets, maleAbsences, categories);
+
+  // Лист 3: «Женский состав»
+  const femaleCadets = state.cadets.filter(c => c.gender === 'Ж' || c.gender === 'female');
+  const femaleAbsences = state.absences.filter(a => a.gender === 'Ж' || a.gender === 'female');
+  const wsFemale = wb.addWorksheet("Женский состав");
+  buildExcelSheet(wsFemale, "(Женский состав)", femaleCadets, femaleAbsences, categories);
 
   // Выгрузка файла через нативный Blob
   const buffer = await wb.xlsx.writeBuffer();
@@ -659,7 +708,7 @@ async function generateExcelReport() {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-  showToast("Строевая записка успешно сгенерирована и скачана!", "success");
+  showToast("Строевая записка (3 листа) успешно сгенерирована и скачана!", "success");
 }
 
 // 5. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ И РЕНДЕРИНГ
@@ -717,13 +766,22 @@ function updateKpi() {
   const statMale = document.getElementById("statCardMale");
   const statFemale = document.getElementById("statCardFemale");
   if (statTotal) {
-    statTotal.textContent = `П/С: ${allCadets.length} чел. | В строю: ${Math.max(0, allCadets.length - allAbsences.length)} чел. | В расходе: ${allAbsences.length} чел.`;
+    const ps = allCadets.length;
+    const abs = allAbsences.length;
+    const nl = Math.max(0, ps - abs);
+    statTotal.textContent = `По списку: ${ps} | В строю: ${nl} | На расходе: ${abs}`;
   }
   if (statMale) {
-    statMale.textContent = `П/С: ${maleCadets.length} чел. | В строю: ${Math.max(0, maleCadets.length - maleAbsences.length)} чел. | В расходе: ${maleAbsences.length} чел.`;
+    const ps = maleCadets.length;
+    const abs = maleAbsences.length;
+    const nl = Math.max(0, ps - abs);
+    statMale.textContent = `По списку: ${ps} | В строю: ${nl} | На расходе: ${abs}`;
   }
   if (statFemale) {
-    statFemale.textContent = `П/С: ${femaleCadets.length} чел. | В строю: ${Math.max(0, femaleCadets.length - femaleAbsences.length)} чел. | В расходе: ${femaleAbsences.length} чел.`;
+    const ps = femaleCadets.length;
+    const abs = femaleAbsences.length;
+    const nl = Math.max(0, ps - abs);
+    statFemale.textContent = `По списку: ${ps} | В строю: ${nl} | На расходе: ${abs}`;
   }
 
   // Контроль сквозного математического баланса
@@ -739,6 +797,14 @@ function updateKpi() {
       balanceBanner.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> <strong>Нарушение баланса:</strong> Сумма мужского и женского состава не сходится с общим!`;
     }
   }
+}
+
+function calculateAndRenderBalance() {
+  updateKpi();
+}
+
+function updateSliceStats() {
+  updateKpi();
 }
 
 function getAvailableCadets(query = "") {
@@ -843,6 +909,119 @@ function renderAbsencesTable() {
     tbody.appendChild(tr);
   });
 }
+
+// -------------------------------------------------------------
+// МОДАЛЬНОЕ ОКНО ВЫБОРА КУРСА ПРИ ИМПОРТЕ EXCEL
+// -------------------------------------------------------------
+
+let pendingImportCadets = [];
+let selectedImportCourse = 3;
+
+function openImportCourseModal(cadets) {
+  pendingImportCadets = cadets || [];
+  const modal = document.getElementById("importCourseModal");
+  if (!modal) return;
+
+  let defaultCourse = 3;
+  if (cadets.length > 0 && cadets[0].group_num) {
+    const cVal = getCourseFromGroup(cadets[0].group_num);
+    if (cVal !== '?' && !isNaN(parseInt(cVal, 10))) {
+      defaultCourse = parseInt(cVal, 10);
+    }
+  }
+  selectImportCourse(defaultCourse);
+  modal.classList.add("active");
+}
+
+function closeImportCourseModal() {
+  const modal = document.getElementById("importCourseModal");
+  if (modal) modal.classList.remove("active");
+  pendingImportCadets = [];
+}
+
+function selectImportCourse(course) {
+  selectedImportCourse = course;
+  const grid = document.querySelector(".course-choice-grid");
+  if (grid) {
+    grid.querySelectorAll(".course-choice-btn").forEach(btn => {
+      const bCourse = btn.dataset.course;
+      if (String(bCourse) === String(course)) {
+        btn.classList.add("selected");
+      } else {
+        btn.classList.remove("selected");
+      }
+    });
+  }
+
+  const hint = document.getElementById("importCourseHint");
+  if (hint) {
+    if (course === 'keep') {
+      hint.textContent = "Выбран режим: Оставить как в файле (номера групп не меняются)";
+    } else {
+      let sample = "1280";
+      if (pendingImportCadets && pendingImportCadets.length > 0 && pendingImportCadets[0].group_num) {
+        sample = pendingImportCadets[0].group_num;
+      }
+      const changed = changeGroupCourse(sample, course);
+      hint.textContent = `Выбран: ${course} курс (группа ${sample} станет ${changed})`;
+    }
+  }
+}
+
+function confirmImportWithCourse() {
+  if (!pendingImportCadets || pendingImportCadets.length === 0) {
+    closeImportCourseModal();
+    return;
+  }
+
+  const targetCourse = selectedImportCourse;
+  state.cadets = pendingImportCadets.map((c, idx) => {
+    let grp = c.group_num || "";
+    let crs = c.course || 1;
+
+    if (targetCourse !== 'keep') {
+      const numCourse = parseInt(targetCourse, 10);
+      grp = changeGroupCourse(grp, numCourse);
+      crs = numCourse;
+    } else {
+      const detected = getCourseFromGroup(grp);
+      if (detected !== "?") {
+        crs = parseInt(detected, 10);
+      }
+    }
+
+    return {
+      id: nextCadetId++,
+      rank: c.rank || "курсант",
+      fio: c.fio,
+      short_fio: c.short_fio || makeShortFio(c.fio),
+      group_num: grp,
+      course: crs,
+      gender: (c.gender === 'female' || c.gender === 'Ж') ? 'Ж' : detectGender(c.fio, c.gender),
+      status: 'active',
+      sort_order: idx
+    };
+  });
+
+  state.absences = []; // сброс расхода для нового списка личного состава
+
+  closeImportCourseModal();
+
+  updateKpi();
+  updateCadetGroupFilterOptions();
+  renderCadetsTable();
+  updateCadetSelectOptions();
+  renderAbsencesTable();
+  calculateAndRenderBalance();
+  renderLivePreview();
+
+  showToast(`Успешно загружено курсантов: ${state.cadets.length} чел.${targetCourse !== 'keep' ? ` (${targetCourse} курс)` : ''}`, "success");
+}
+
+window.openImportCourseModal = openImportCourseModal;
+window.closeImportCourseModal = closeImportCourseModal;
+window.selectImportCourse = selectImportCourse;
+window.confirmImportWithCourse = confirmImportWithCourse;
 
 // -------------------------------------------------------------
 // STAGING WIZARD ДЛЯ WEB-ВЕРСИИ
@@ -1235,6 +1414,8 @@ function toggleCadetGender(cadetId) {
   renderCadetsTable();
   renderAbsencesTable();
   calculateAndRenderBalance();
+  updateKpi();
+  renderLivePreview();
   showToast(`Пол курсанта ${cadet.short_fio} изменен на ${cadet.gender}`, "info");
 }
 
@@ -1375,37 +1556,44 @@ function renderLivePreview() {
     `;
   });
 
-  const genderRowsHtml = [
-    { label: "Мужчины", val: "М", numIdx: groups.length + 1 },
-    { label: "Женщины", val: "Ж", numIdx: groups.length + 2 }
-  ].map(g => {
-    const gCadets = state.cadets.filter(c => c.gender === g.val);
-    const gPs = gCadets.length;
-    const gAbs = state.absences.filter(a => a.gender === g.val);
-    const gNl = gPs - gAbs.length;
+  const hasMales = state.cadets.some(c => c.gender === 'М' || c.gender === 'male');
+  const hasFemales = state.cadets.some(c => c.gender === 'Ж' || c.gender === 'female');
 
-    const rowCounts = {};
-    categories.forEach(cat => {
-      rowCounts[cat] = gAbs.filter(a => a.category === cat).length;
-    });
+  let genderRowsHtml = "";
+  if (hasMales && hasFemales) {
+    genderRowsHtml = [
+      { label: "Расход личного состава (Мужчины / Юноши)", val: "М", val2: "male", numIdx: groups.length + 1 },
+      { label: "Расход личного состава (Женщины / Девушки)", val: "Ж", val2: "female", numIdx: groups.length + 2 }
+    ].map(g => {
+      const gCadets = state.cadets.filter(c => c.gender === g.val || c.gender === g.val2);
+      const gPs = gCadets.length;
+      const gAbs = state.absences.filter(a => a.gender === g.val || a.gender === g.val2);
+      const gNl = gPs - gAbs.length;
 
-    return `
-      <tr>
-        <td>${g.numIdx}</td>
-        <td>${g.label}</td>
-        <td>${gPs}</td>
-        <td>${gNl}</td>
-        ${categories.map(c => `<td>${rowCounts[c] > 0 ? rowCounts[c] : ""}</td>`).join("")}
-        <td colspan="2">${gAbs.length > 0 ? gAbs.length : ""}</td>
-      </tr>
-    `;
-  }).join("");
+      const rowCounts = {};
+      categories.forEach(cat => {
+        rowCounts[cat] = gAbs.filter(a => a.category === cat).length;
+      });
+
+      return `
+        <tr>
+          <td>${g.numIdx}</td>
+          <td>${g.label}</td>
+          <td>${gPs}</td>
+          <td>${gNl}</td>
+          ${categories.map(c => `<td>${rowCounts[c] > 0 ? rowCounts[c] : ""}</td>`).join("")}
+          <td colspan="2">${gAbs.length > 0 ? gAbs.length : ""}</td>
+        </tr>
+      `;
+    }).join("");
+  }
 
   const totalAbsAll = Object.values(catTotals).reduce((sum, v) => sum + v, 0);
+  const totalNumIdx = (hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
   const totalRowHtml = `
     <tr class="bold-cell">
-      <td>${groups.length + 3}</td>
-      <td>Всего</td>
+      <td>${totalNumIdx}</td>
+      <td>ИТОГО общий расход</td>
       <td>${totalPs}</td>
       <td>${totalNl}</td>
       ${categories.map(c => `<td>${catTotals[c] > 0 ? catTotals[c] : ""}</td>`).join("")}
@@ -1744,8 +1932,8 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        // Открываем интерактивный предпросмотр (Staging Wizard)
-        openWizardModal(loadedCadets);
+        // Открываем модальное окно выбора курса при импорте
+        openImportCourseModal(loadedCadets);
       } catch (err) {
         console.error(err);
         showToast("Ошибка при чтении Excel-файла: " + err.message, "danger");

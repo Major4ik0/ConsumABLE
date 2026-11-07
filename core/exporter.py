@@ -146,7 +146,10 @@ def build_sheet_content(
     has_females = any(normalize_gender(c.get('gender')) == 'female' for c in cadets)
 
     if has_males and has_females:
-        for g_label, g_norm, num_idx in [("Мужчины", "male", len(groups) + 1), ("Женщины", "female", len(groups) + 2)]:
+        for g_label, g_norm, num_idx in [
+            ("Расход личного состава (Мужчины / Юноши)", "male", len(groups) + 1),
+            ("Расход личного состава (Женщины / Девушки)", "female", len(groups) + 2)
+        ]:
             ws.row_dimensions[curr_row].height = 17.0
             g_cadets = [c for c in cadets if normalize_gender(c.get('gender')) == g_norm]
             g_ps = len(g_cadets)
@@ -170,10 +173,10 @@ def build_sheet_content(
             style_range(ws, f"B{curr_row}:{v_col2_letter}{curr_row}", border=cell_border, font=norm_font, alignment=center)
             curr_row += 1
 
-    # Строка «Всего» (Итого) with dynamic formulas
+    # Строка «ИТОГО общий расход» with dynamic formulas
     ws.row_dimensions[curr_row].height = 18.0
     ws.cell(row=curr_row, column=2, value=len(groups) + 3 if (has_males and has_females) else len(groups) + 1)
-    ws.cell(row=curr_row, column=3, value="Всего")
+    ws.cell(row=curr_row, column=3, value="ИТОГО общий расход")
 
     if groups:
         ws.cell(row=curr_row, column=4, value=f"=SUM(D{first_grp_row}:D{last_grp_row})")

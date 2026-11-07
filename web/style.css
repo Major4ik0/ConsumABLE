@@ -939,6 +939,40 @@ select option:hover, select option:checked, .dropdown-item:hover, .autocomplete-
   overflow-y: auto;
 }
 
+/* Сетка выбора курса при импорте Excel */
+.course-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 14px 0 10px 0;
+}
+
+.course-choice-btn {
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+
+.course-choice-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.course-choice-btn.selected {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+}
+
 .toast {
   background: #1E293B;
   color: #FFFFFF;
