@@ -200,7 +200,7 @@ def download_excel_report(report_date: Optional[str] = None):
             absences=absences,
             unit_title=db.get_setting("unit_title", "3 курс 1 факультета"),
             chief_title=db.get_setting("chief_title", "Начальник 3 курса 1 факультета"),
-            chief_name=db.get_setting("chief_name", "майор                          В.Медков"),
+            chief_name=db.get_setting("chief_name", ""),
             active_categories=categories
         )
         with open(tmp_path, "rb") as f:

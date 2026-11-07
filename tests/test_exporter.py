@@ -21,7 +21,7 @@ def test_export_report_creates_three_sheets_with_formulas(tmp_path):
         absences=absences,
         unit_title="1 курс 1 факультета",
         chief_title="Начальник курса",
-        chief_name="майор В.Медков",
+        chief_name="майор И.Иванов",
         active_categories=["Наряд", "Госпиталь", "Лазарет"]
     )
 

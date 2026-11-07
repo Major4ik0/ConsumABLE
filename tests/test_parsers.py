@@ -63,7 +63,7 @@ class TestGenderDetection:
 class TestShortFio:
     def test_standard_fio(self):
         assert make_short_fio("Иванов Иван Иванович") == "Иванов И.И."
-        assert make_short_fio("Медков Владимир") == "Медков В."
+        assert make_short_fio("Петров Владимир") == "Петров В."
         assert make_short_fio("Сидоров А. Б.") == "Сидоров А.Б."
 
 
@@ -186,10 +186,10 @@ class TestCourseTransformations:
         ws = wb.active
         ws.title = "Расход"
         ws["B10"] = "Начальник 3 курса 1 факультета"
-        ws["B11"] = "майор                          В.Медков"
+        ws["B11"] = "майор                          И.Иванов"
         wb.save(test_file)
 
         title, rank, name = parse_signature_from_excel(test_file)
         assert title == "Начальник 3 курса 1 факультета"
         assert rank == "майор"
-        assert name == "В.Медков"
+        assert name == "И.Иванов"

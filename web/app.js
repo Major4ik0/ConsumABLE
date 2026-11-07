@@ -11,9 +11,9 @@ const state = {
     reportDate: getTodayDateString(),
     unitTitle: "* курс * факультета (автоматизированных систем управления)",
     chiefTitle: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title')) || "Начальник * курса * факультета",
-    commanderRank: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "майор",
-    commanderName: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "В.Медков",
-    chiefName: "майор                          В.Медков"
+    commanderRank: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "",
+    commanderName: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "",
+    chiefName: ""
   },
   cadets: [],
   absences: [],
@@ -83,9 +83,17 @@ function updateHeaderSettings(faculty = null, course = null) {
 }
 
 function syncChiefName() {
-  const rk = state.settings.commanderRank || "майор";
-  const nm = state.settings.commanderName || "";
-  state.settings.chiefName = nm ? `${rk}                          ${nm}` : rk;
+  const rk = (state.settings.commanderRank || "").trim();
+  const nm = (state.settings.commanderName || "").trim();
+  if (rk && nm) {
+    state.settings.chiefName = `${rk}                          ${nm}`;
+  } else if (rk) {
+    state.settings.chiefName = rk;
+  } else if (nm) {
+    state.settings.chiefName = nm;
+  } else {
+    state.settings.chiefName = "";
+  }
   const chiefNameEl = document.getElementById("chiefName");
   if (chiefNameEl) chiefNameEl.value = state.settings.chiefName;
 }
@@ -2038,12 +2046,17 @@ function resetAllData() {
   state.cadets = [];
   state.absences = [];
   state.settings.reportDate = getTodayDateString();
-  state.settings.unitTitle = "3 курс 1 факультета (автоматизированных систем управления)";
-  state.settings.chiefTitle = "Начальник 3 курса 1 факультета";
-  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "майор";
-  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "В.Медков";
-  state.settings.commanderRank = savedRank;
-  state.settings.commanderName = savedName;
+  state.settings.unitTitle = "* курс * факультета (автоматизированных систем управления)";
+  state.settings.chiefTitle = "Начальник * курса * факультета";
+  state.settings.commanderRank = "";
+  state.settings.commanderName = "";
+  state.settings.chiefName = "";
+
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('consumable_commander_rank');
+    localStorage.removeItem('consumable_commander_name');
+    localStorage.removeItem('consumable_chief_title');
+  }
   syncChiefName();
 
   const reportDateEl = document.getElementById("reportDate");
@@ -2053,9 +2066,9 @@ function resetAllData() {
   const chiefTitleEl = document.getElementById("chiefTitle");
   if (chiefTitleEl) chiefTitleEl.value = state.settings.chiefTitle;
   const rankEl = document.getElementById("commanderRank");
-  if (rankEl) rankEl.value = savedRank;
+  if (rankEl) rankEl.value = "";
   const nameEl = document.getElementById("commanderName");
-  if (nameEl) nameEl.value = savedName;
+  if (nameEl) nameEl.value = "";
 
   updateKpi();
   updateCadetGroupFilterOptions();
@@ -2077,18 +2090,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const commanderRankEl = document.getElementById("commanderRank");
   const commanderNameEl = document.getElementById("commanderName");
 
-  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || state.settings.commanderRank;
-  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || state.settings.commanderName;
+  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "";
+  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "";
   const savedTitle = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title'));
 
-  if (savedRank) {
-    state.settings.commanderRank = savedRank;
-    if (commanderRankEl) commanderRankEl.value = savedRank;
-  }
-  if (savedName) {
-    state.settings.commanderName = savedName;
-    if (commanderNameEl) commanderNameEl.value = savedName;
-  }
+  state.settings.commanderRank = savedRank;
+  if (commanderRankEl) commanderRankEl.value = savedRank;
+
+  state.settings.commanderName = savedName;
+  if (commanderNameEl) commanderNameEl.value = savedName;
+
   if (savedTitle) {
     state.settings.chiefTitle = savedTitle;
     if (chiefTitleEl) chiefTitleEl.value = savedTitle;
@@ -2125,9 +2136,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (commanderRankEl) {
     commanderRankEl.value = state.settings.commanderRank;
     commanderRankEl.addEventListener("change", e => {
-      state.settings.commanderRank = e.target.value;
+      const val = e.target.value.trim();
+      state.settings.commanderRank = val;
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('consumable_commander_rank', e.target.value);
+        if (val) {
+          localStorage.setItem('consumable_commander_rank', val);
+        } else {
+          localStorage.removeItem('consumable_commander_rank');
+        }
       }
       syncChiefName();
       renderLivePreview();
@@ -2137,9 +2153,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (commanderNameEl) {
     commanderNameEl.value = state.settings.commanderName;
     commanderNameEl.addEventListener("input", e => {
-      state.settings.commanderName = e.target.value.trim();
+      const val = e.target.value.trim();
+      state.settings.commanderName = val;
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('consumable_commander_name', e.target.value.trim());
+        if (val) {
+          localStorage.setItem('consumable_commander_name', val);
+        } else {
+          localStorage.removeItem('consumable_commander_name');
+        }
       }
       syncChiefName();
       renderLivePreview();
@@ -2182,14 +2203,28 @@ document.addEventListener("DOMContentLoaded", () => {
           if (typeof localStorage !== 'undefined') {
             localStorage.setItem('consumable_commander_rank', sig.foundRank);
           }
+        } else {
+          state.settings.commanderRank = "";
+          if (commanderRankEl) commanderRankEl.value = "";
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('consumable_commander_rank');
+          }
         }
+
         if (sig.foundName) {
           state.settings.commanderName = sig.foundName;
           if (commanderNameEl) commanderNameEl.value = sig.foundName;
           if (typeof localStorage !== 'undefined') {
             localStorage.setItem('consumable_commander_name', sig.foundName);
           }
+        } else {
+          state.settings.commanderName = "";
+          if (commanderNameEl) commanderNameEl.value = "";
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('consumable_commander_name');
+          }
         }
+
         if (sig.foundTitle) {
           state.settings.chiefTitle = sig.foundTitle;
           if (chiefTitleEl) chiefTitleEl.value = sig.foundTitle;

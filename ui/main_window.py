@@ -866,16 +866,18 @@ class MainWindow(QMainWindow):
         self.combo_commander_rank.setView(QListView())
         self.combo_commander_rank.view().setStyleSheet(POPUP_STYLE)
         self.combo_commander_rank.addItems([
-            "майор", "капитан", "подполковник", "старший лейтенант", "лейтенант",
+            "", "майор", "капитан", "подполковник", "старший лейтенант", "лейтенант",
             "полковник", "младший лейтенант", "старший прапорщик", "прапорщик",
             "старшина", "старший сержант", "сержант", "младший сержант", "ефрейтор", "рядовой"
         ])
-        curr_rank = self.db.get_setting("commander_rank", "майор")
+        curr_rank = self.db.get_setting("commander_rank", "")
         idx_r = self.combo_commander_rank.findText(curr_rank)
         if idx_r >= 0:
             self.combo_commander_rank.setCurrentIndex(idx_r)
+        else:
+            self.combo_commander_rank.setCurrentIndex(0)
 
-        self.edit_commander_name = QLineEdit(self.db.get_setting("commander_name", "В.Медков"))
+        self.edit_commander_name = QLineEdit(self.db.get_setting("commander_name", ""))
         self.edit_commander_name.setPlaceholderText("Фамилия И.О.")
 
         form_sig.addRow("Наименование подразделения:", self.edit_unit)
@@ -926,11 +928,15 @@ class MainWindow(QMainWindow):
         return tab
 
     def get_chief_full_name(self) -> str:
-        rank = self.db.get_setting("commander_rank", "майор")
-        fio = self.db.get_setting("commander_name", "В.Медков")
-        if not fio:
+        rank = self.db.get_setting("commander_rank", "").strip()
+        fio = self.db.get_setting("commander_name", "").strip()
+        if rank and fio:
+            return f"{rank}                          {fio}"
+        elif rank:
             return rank
-        return f"{rank}                          {fio}"
+        elif fio:
+            return fio
+        return ""
 
     def save_signatures(self):
         self.db.set_setting("unit_title", self.edit_unit.text().strip())
@@ -939,7 +945,7 @@ class MainWindow(QMainWindow):
         fio = self.edit_commander_name.text().strip()
         self.db.set_setting("commander_rank", rank)
         self.db.set_setting("commander_name", fio)
-        full_chief = f"{rank}                          {fio}" if fio else rank
+        full_chief = f"{rank}                          {fio}" if (rank and fio) else (rank or fio)
         self.db.set_setting("chief_name", full_chief)
         QMessageBox.information(self, "Успех", "Параметры строевой записки сохранены.")
 
@@ -1229,18 +1235,35 @@ class MainWindow(QMainWindow):
                     idx_r = self.combo_commander_rank.findText(sig_rank)
                     if idx_r >= 0:
                         self.combo_commander_rank.setCurrentIndex(idx_r)
+            else:
+                self.db.set_setting("commander_rank", "")
+                if hasattr(self, "combo_commander_rank"):
+                    self.combo_commander_rank.setCurrentIndex(0)
+
             if sig_name:
                 self.db.set_setting("commander_name", sig_name)
                 if hasattr(self, "edit_commander_name"):
                     self.edit_commander_name.setText(sig_name)
+            else:
+                self.db.set_setting("commander_name", "")
+                if hasattr(self, "edit_commander_name"):
+                    self.edit_commander_name.clear()
+
             if sig_title:
                 self.db.set_setting("chief_title", sig_title)
                 if hasattr(self, "edit_chief_title"):
                     self.edit_chief_title.setText(sig_title)
-            if sig_rank or sig_name:
-                rk = self.db.get_setting("commander_rank", "майор")
-                nm = self.db.get_setting("commander_name", "В.Медков")
-                self.db.set_setting("chief_name", f"{rk}                          {nm}" if nm else rk)
+
+            rk = self.db.get_setting("commander_rank", "").strip()
+            nm = self.db.get_setting("commander_name", "").strip()
+            if rk and nm:
+                self.db.set_setting("chief_name", f"{rk}                          {nm}")
+            elif rk:
+                self.db.set_setting("chief_name", rk)
+            elif nm:
+                self.db.set_setting("chief_name", nm)
+            else:
+                self.db.set_setting("chief_name", "")
 
             staging_cadets = parse_roster_excel(file_path)
             if not staging_cadets:

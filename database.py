@@ -72,11 +72,11 @@ class Database:
         cur.execute("SELECT COUNT(*) FROM app_settings")
         if cur.fetchone()[0] == 0:
             defaults = [
-                ("unit_title", "2 курс 1 факультета (автоматизированных систем управления)"),
-                ("chief_title", "Начальник 2 курса 1 факультета"),
-                ("commander_rank", "майор"),
-                ("commander_name", "В.Медков"),
-                ("chief_name", "майор                          В.Медков"),
+                ("unit_title", "* курс * факультета (автоматизированных систем управления)"),
+                ("chief_title", "Начальник * курса * факультета"),
+                ("commander_rank", ""),
+                ("commander_name", ""),
+                ("chief_name", ""),
             ]
             self.conn.executemany("INSERT INTO app_settings (key, value) VALUES (?, ?)", defaults)
 
