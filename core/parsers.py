@@ -483,3 +483,62 @@ def toggle_gender(cadet: StagingCadetDTO) -> StagingCadetDTO:
     c.needs_manual_review = False
     c.warnings = [w for w in c.warnings if "пол определен" not in w.lower()]
     return c
+
+
+SIGNATURE_RANKS = [
+    'генерал-майор', 'подполковник', 'старший лейтенант', 'младший лейтенант',
+    'старший прапорщик', 'старший сержант', 'младший сержант',
+    'полковник', 'капитан', 'майор', 'лейтенант', 'старшина',
+    'прапорщик', 'сержант', 'ефрейтор', 'рядовой'
+]
+
+
+def parse_signature_from_excel(file_source: Union[str, bytes, BinaryIO]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Scans the workbook for chief/commander signature block at the bottom of the sheets.
+    Returns: (chief_title, rank, fio)
+    """
+    if isinstance(file_source, str):
+        if not os.path.exists(file_source):
+            return None, None, None
+        wb = openpyxl.load_workbook(file_source, data_only=True)
+    elif isinstance(file_source, bytes):
+        wb = openpyxl.load_workbook(io.BytesIO(file_source), data_only=True)
+    else:
+        wb = openpyxl.load_workbook(file_source, data_only=True)
+
+    found_title = None
+    found_rank = None
+    found_name = None
+
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        for row in ws.iter_rows(values_only=True):
+            cells = [str(c).strip() for c in row if c is not None and str(c).strip()]
+            line = ' '.join(cells)
+            if not line:
+                continue
+
+            if not found_title and re.search(r'начальник\s+.*курс', line, re.IGNORECASE):
+                m_title = re.search(r'(начальник\s+[^,\n]+)', line, re.IGNORECASE)
+                if m_title:
+                    found_title = m_title.group(1).strip()
+
+            if not (found_rank and found_name):
+                for rk in SIGNATURE_RANKS:
+                    pattern = rf'(?:^|[^а-яёА-ЯЁ])({rk})(?:[^а-яёА-ЯЁ]|$)'
+                    if re.search(pattern, line, re.IGNORECASE):
+                        found_rank = rk
+                        idx = line.lower().find(rk)
+                        rem = line[idx + len(rk):].strip()
+                        m_fio = re.search(r'([А-ЯЁа-яё\-]+(?:\s+[А-ЯЁ]\.){1,2}|[А-ЯЁ]\.\s*[А-ЯЁа-яё\-]+|[А-ЯЁ]\.\s*[А-ЯЁ]\.\s*[А-ЯЁа-яё\-]+|[А-ЯЁа-яё\-]{3,})', rem)
+                        if m_fio:
+                            found_name = m_fio.group(0).strip()
+                        break
+
+            if found_title and found_rank and found_name:
+                break
+        if found_rank and found_name:
+            break
+
+    return found_title, found_rank, found_name

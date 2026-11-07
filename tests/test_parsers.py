@@ -176,3 +176,20 @@ class TestCourseTransformations:
         # 3. Re-importing with another faculty/course
         assert update_header_text(u_updated, faculty=2, course=4) == "4 курс 2 факультета (автоматизированных систем управления)"
         assert update_header_text(c_updated, faculty=2, course=4) == "Начальник 4 курса 2 факультета"
+
+    def test_parse_signature_from_excel(self, tmp_path):
+        import openpyxl
+        from core.parsers import parse_signature_from_excel
+
+        test_file = str(tmp_path / "test_sig.xlsx")
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Расход"
+        ws["B10"] = "Начальник 3 курса 1 факультета"
+        ws["B11"] = "майор                          В.Медков"
+        wb.save(test_file)
+
+        title, rank, name = parse_signature_from_excel(test_file)
+        assert title == "Начальник 3 курса 1 факультета"
+        assert rank == "майор"
+        assert name == "В.Медков"

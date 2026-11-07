@@ -16,7 +16,8 @@ from PyQt5.QtSvg import QSvgRenderer
 from database import Database
 from core.parsers import (
     parse_roster_excel, make_short_fio, change_group_course,
-    parse_group_code, get_course_from_group, update_header_text
+    parse_group_code, get_course_from_group, update_header_text,
+    parse_signature_from_excel
 )
 from core.models import normalize_gender, gender_to_ru
 from core.balance import compute_tri_slice_balance
@@ -860,11 +861,27 @@ class MainWindow(QMainWindow):
         form_sig = QFormLayout()
         self.edit_unit = QLineEdit(self.db.get_setting("unit_title", "* курс * факультета (автоматизированных систем управления)"))
         self.edit_chief_title = QLineEdit(self.db.get_setting("chief_title", "Начальник * курса * факультета"))
-        self.edit_chief_name = QLineEdit(self.db.get_setting("chief_name", "майор                          В.Медков"))
+
+        self.combo_commander_rank = QComboBox()
+        self.combo_commander_rank.setView(QListView())
+        self.combo_commander_rank.view().setStyleSheet(POPUP_STYLE)
+        self.combo_commander_rank.addItems([
+            "майор", "капитан", "подполковник", "старший лейтенант", "лейтенант",
+            "полковник", "младший лейтенант", "старший прапорщик", "прапорщик",
+            "старшина", "старший сержант", "сержант", "младший сержант", "ефрейтор", "рядовой"
+        ])
+        curr_rank = self.db.get_setting("commander_rank", "майор")
+        idx_r = self.combo_commander_rank.findText(curr_rank)
+        if idx_r >= 0:
+            self.combo_commander_rank.setCurrentIndex(idx_r)
+
+        self.edit_commander_name = QLineEdit(self.db.get_setting("commander_name", "В.Медков"))
+        self.edit_commander_name.setPlaceholderText("Фамилия И.О.")
 
         form_sig.addRow("Наименование подразделения:", self.edit_unit)
         form_sig.addRow("Должность начальника:", self.edit_chief_title)
-        form_sig.addRow("Воинское звание и фамилия:", self.edit_chief_name)
+        form_sig.addRow("В/звание начальника:", self.combo_commander_rank)
+        form_sig.addRow("Фамилия и инициалы:", self.edit_commander_name)
         sig_layout.addLayout(form_sig)
 
         btn_save_sig = QPushButton("Сохранить параметры")
@@ -908,10 +925,22 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         return tab
 
+    def get_chief_full_name(self) -> str:
+        rank = self.db.get_setting("commander_rank", "майор")
+        fio = self.db.get_setting("commander_name", "В.Медков")
+        if not fio:
+            return rank
+        return f"{rank}                          {fio}"
+
     def save_signatures(self):
         self.db.set_setting("unit_title", self.edit_unit.text().strip())
         self.db.set_setting("chief_title", self.edit_chief_title.text().strip())
-        self.db.set_setting("chief_name", self.edit_chief_name.text().strip())
+        rank = self.combo_commander_rank.currentText().strip()
+        fio = self.edit_commander_name.text().strip()
+        self.db.set_setting("commander_rank", rank)
+        self.db.set_setting("commander_name", fio)
+        full_chief = f"{rank}                          {fio}" if fio else rank
+        self.db.set_setting("chief_name", full_chief)
         QMessageBox.information(self, "Успех", "Параметры строевой записки сохранены.")
 
     def get_selected_date_str(self):
@@ -1174,7 +1203,7 @@ class MainWindow(QMainWindow):
                     absences=absences,
                     unit_title=self.db.get_setting("unit_title", "* курс * факультета (автоматизированных систем управления)"),
                     chief_title=self.db.get_setting("chief_title", "Начальник * курса * факультета"),
-                    chief_name=self.db.get_setting("chief_name", "майор                          В.Медков"),
+                    chief_name=self.get_chief_full_name(),
                     active_categories=self.db.get_distinct_categories()
                 )
                 QMessageBox.information(
@@ -1192,6 +1221,27 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            # Поиск подписи должностного лица (начальника курса) в Excel
+            sig_title, sig_rank, sig_name = parse_signature_from_excel(file_path)
+            if sig_rank:
+                self.db.set_setting("commander_rank", sig_rank)
+                if hasattr(self, "combo_commander_rank"):
+                    idx_r = self.combo_commander_rank.findText(sig_rank)
+                    if idx_r >= 0:
+                        self.combo_commander_rank.setCurrentIndex(idx_r)
+            if sig_name:
+                self.db.set_setting("commander_name", sig_name)
+                if hasattr(self, "edit_commander_name"):
+                    self.edit_commander_name.setText(sig_name)
+            if sig_title:
+                self.db.set_setting("chief_title", sig_title)
+                if hasattr(self, "edit_chief_title"):
+                    self.edit_chief_title.setText(sig_title)
+            if sig_rank or sig_name:
+                rk = self.db.get_setting("commander_rank", "майор")
+                nm = self.db.get_setting("commander_name", "В.Медков")
+                self.db.set_setting("chief_name", f"{rk}                          {nm}" if nm else rk)
+
             staging_cadets = parse_roster_excel(file_path)
             if not staging_cadets:
                 QMessageBox.warning(

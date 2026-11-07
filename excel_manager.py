@@ -9,7 +9,8 @@ from core.parsers import (
     parse_cadets_sheet,
     parse_group_code,
     change_group_course,
-    get_course_from_group
+    get_course_from_group,
+    parse_signature_from_excel
 )
 from core.models import gender_to_ru, normalize_gender
 from core.exporter import export_report_to_excel, style_range

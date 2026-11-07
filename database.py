@@ -74,6 +74,8 @@ class Database:
             defaults = [
                 ("unit_title", "2 курс 1 факультета (автоматизированных систем управления)"),
                 ("chief_title", "Начальник 2 курса 1 факультета"),
+                ("commander_rank", "майор"),
+                ("commander_name", "В.Медков"),
                 ("chief_name", "майор                          В.Медков"),
             ]
             self.conn.executemany("INSERT INTO app_settings (key, value) VALUES (?, ?)", defaults)

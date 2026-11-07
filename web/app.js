@@ -10,8 +10,10 @@ const state = {
   settings: {
     reportDate: getTodayDateString(),
     unitTitle: "* курс * факультета (автоматизированных систем управления)",
-    chiefTitle: "Начальник * курса * факультета",
-    chiefName: "майор                          *. ********"
+    chiefTitle: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title')) || "Начальник * курса * факультета",
+    commanderRank: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "майор",
+    commanderName: (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "В.Медков",
+    chiefName: "майор                          В.Медков"
   },
   cadets: [],
   absences: [],
@@ -78,6 +80,69 @@ function updateHeaderSettings(faculty = null, course = null) {
 
   const chiefTitleEl = document.getElementById("chiefTitle");
   if (chiefTitleEl) chiefTitleEl.value = state.settings.chiefTitle;
+}
+
+function syncChiefName() {
+  const rk = state.settings.commanderRank || "майор";
+  const nm = state.settings.commanderName || "";
+  state.settings.chiefName = nm ? `${rk}                          ${nm}` : rk;
+  const chiefNameEl = document.getElementById("chiefName");
+  if (chiefNameEl) chiefNameEl.value = state.settings.chiefName;
+}
+
+const SIGNATURE_RANKS = [
+  'генерал-майор', 'подполковник', 'старший лейтенант', 'младший лейтенант',
+  'старший прапорщик', 'старший сержант', 'младший сержант',
+  'полковник', 'капитан', 'майор', 'лейтенант', 'старшина',
+  'прапорщик', 'сержант', 'ефрейтор', 'рядовой'
+];
+
+function parseSignatureFromWorkbook(wb) {
+  let foundTitle = null;
+  let foundRank = null;
+  let foundName = null;
+
+  if (!wb || !wb.SheetNames) return { foundTitle, foundRank, foundName };
+
+  for (const sname of wb.SheetNames) {
+    const ws = wb.Sheets[sname];
+    if (!ws) continue;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    if (!rows || rows.length === 0) continue;
+
+    for (const r of rows) {
+      if (!r || !Array.isArray(r)) continue;
+      const cells = r.filter(c => c !== null && c !== undefined && String(c).trim() !== '').map(c => String(c).trim());
+      const line = cells.join(' ');
+      if (!line) continue;
+
+      if (!foundTitle && /начальник\s+.*курс/i.test(line)) {
+        const mTitle = line.match(/(начальник\s+[^,\n]+)/i);
+        if (mTitle) foundTitle = mTitle[1].trim();
+      }
+
+      if (!(foundRank && foundName)) {
+        for (const rk of SIGNATURE_RANKS) {
+          const re = new RegExp('(?:^|[^а-яёА-ЯЁ])(' + rk + ')(?:[^а-яёА-ЯЁ]|$)', 'i');
+          if (re.test(line)) {
+            foundRank = rk;
+            const idx = line.toLowerCase().indexOf(rk);
+            const rem = line.slice(idx + rk.length).trim();
+            const mFio = rem.match(/([А-ЯЁа-яё\-]+(?:\s+[А-ЯЁ]\.){1,2}|[А-ЯЁ]\.\s*[А-ЯЁа-яё\-]+|[А-ЯЁ]\.\s*[А-ЯЁ]\.\s*[А-ЯЁа-яё\-]+|[А-ЯЁа-яё\-]{3,})/);
+            if (mFio) {
+              foundName = mFio[0].trim();
+            }
+            break;
+          }
+        }
+      }
+
+      if (foundTitle && foundRank && foundName) break;
+    }
+    if (foundRank && foundName) break;
+  }
+
+  return { foundTitle, foundRank, foundName };
 }
 
 // 2. АЛГОРИТМЫ ОБРАБОТКИ ФИО И ПОЛА (1-в-1 ИЗ EXCEL_MANAGER.PY)
@@ -1975,12 +2040,22 @@ function resetAllData() {
   state.settings.reportDate = getTodayDateString();
   state.settings.unitTitle = "3 курс 1 факультета (автоматизированных систем управления)";
   state.settings.chiefTitle = "Начальник 3 курса 1 факультета";
-  state.settings.chiefName = "майор                          В.Медков";
+  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || "майор";
+  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || "В.Медков";
+  state.settings.commanderRank = savedRank;
+  state.settings.commanderName = savedName;
+  syncChiefName();
 
-  document.getElementById("reportDate").value = state.settings.reportDate;
-  document.getElementById("unitTitle").value = state.settings.unitTitle;
-  document.getElementById("chiefTitle").value = state.settings.chiefTitle;
-  document.getElementById("chiefName").value = state.settings.chiefName;
+  const reportDateEl = document.getElementById("reportDate");
+  if (reportDateEl) reportDateEl.value = state.settings.reportDate;
+  const unitTitleEl = document.getElementById("unitTitle");
+  if (unitTitleEl) unitTitleEl.value = state.settings.unitTitle;
+  const chiefTitleEl = document.getElementById("chiefTitle");
+  if (chiefTitleEl) chiefTitleEl.value = state.settings.chiefTitle;
+  const rankEl = document.getElementById("commanderRank");
+  if (rankEl) rankEl.value = savedRank;
+  const nameEl = document.getElementById("commanderName");
+  if (nameEl) nameEl.value = savedName;
 
   updateKpi();
   updateCadetGroupFilterOptions();
@@ -1999,7 +2074,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const reportDateEl = document.getElementById("reportDate");
   const unitTitleEl = document.getElementById("unitTitle");
   const chiefTitleEl = document.getElementById("chiefTitle");
-  const chiefNameEl = document.getElementById("chiefName");
+  const commanderRankEl = document.getElementById("commanderRank");
+  const commanderNameEl = document.getElementById("commanderName");
+
+  const savedRank = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_rank')) || state.settings.commanderRank;
+  const savedName = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_commander_name')) || state.settings.commanderName;
+  const savedTitle = (typeof localStorage !== 'undefined' && localStorage.getItem('consumable_chief_title'));
+
+  if (savedRank) {
+    state.settings.commanderRank = savedRank;
+    if (commanderRankEl) commanderRankEl.value = savedRank;
+  }
+  if (savedName) {
+    state.settings.commanderName = savedName;
+    if (commanderNameEl) commanderNameEl.value = savedName;
+  }
+  if (savedTitle) {
+    state.settings.chiefTitle = savedTitle;
+    if (chiefTitleEl) chiefTitleEl.value = savedTitle;
+  }
+  syncChiefName();
 
   if (reportDateEl) {
     reportDateEl.value = state.settings.reportDate;
@@ -2021,14 +2115,33 @@ document.addEventListener("DOMContentLoaded", () => {
     chiefTitleEl.value = state.settings.chiefTitle;
     chiefTitleEl.addEventListener("input", e => {
       state.settings.chiefTitle = e.target.value;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('consumable_chief_title', e.target.value);
+      }
       renderLivePreview();
     });
   }
 
-  if (chiefNameEl) {
-    chiefNameEl.value = state.settings.chiefName;
-    chiefNameEl.addEventListener("input", e => {
-      state.settings.chiefName = e.target.value;
+  if (commanderRankEl) {
+    commanderRankEl.value = state.settings.commanderRank;
+    commanderRankEl.addEventListener("change", e => {
+      state.settings.commanderRank = e.target.value;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('consumable_commander_rank', e.target.value);
+      }
+      syncChiefName();
+      renderLivePreview();
+    });
+  }
+
+  if (commanderNameEl) {
+    commanderNameEl.value = state.settings.commanderName;
+    commanderNameEl.addEventListener("input", e => {
+      state.settings.commanderName = e.target.value.trim();
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('consumable_commander_name', e.target.value.trim());
+      }
+      syncChiefName();
       renderLivePreview();
     });
   }
@@ -2060,6 +2173,31 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const data = await file.arrayBuffer();
         const wb = XLSX.read(data, { type: "array" });
+
+        // Поиск и парсинг подписи должностного лица (начальника курса)
+        const sig = parseSignatureFromWorkbook(wb);
+        if (sig.foundRank) {
+          state.settings.commanderRank = sig.foundRank;
+          if (commanderRankEl) commanderRankEl.value = sig.foundRank;
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('consumable_commander_rank', sig.foundRank);
+          }
+        }
+        if (sig.foundName) {
+          state.settings.commanderName = sig.foundName;
+          if (commanderNameEl) commanderNameEl.value = sig.foundName;
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('consumable_commander_name', sig.foundName);
+          }
+        }
+        if (sig.foundTitle) {
+          state.settings.chiefTitle = sig.foundTitle;
+          if (chiefTitleEl) chiefTitleEl.value = sig.foundTitle;
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('consumable_chief_title', sig.foundTitle);
+          }
+        }
+        syncChiefName();
 
         const priorityNames = ['база', 'личный состав', 'курсанты', 'список', 'список личного состава', 'ведомость'];
         let targetSheets = [];

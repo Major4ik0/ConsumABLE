@@ -147,8 +147,29 @@
             <input type="text" id="chiefTitle" class="form-input" placeholder="Например: Начальник 3 курса 1 факультета">
           </div>
           <div class="form-group">
-            <label class="form-label" for="chiefName">В/звание и фамилия</label>
-            <input type="text" id="chiefName" class="form-input" placeholder="майор                          В.Медков">
+            <label class="form-label" for="commanderRank">В/звание начальника</label>
+            <select id="commanderRank" class="form-select">
+              <option value="майор">майор</option>
+              <option value="капитан">капитан</option>
+              <option value="подполковник">подполковник</option>
+              <option value="старший лейтенант">старший лейтенант</option>
+              <option value="лейтенант">лейтенант</option>
+              <option value="полковник">полковник</option>
+              <option value="младший лейтенант">младший лейтенант</option>
+              <option value="старший прапорщик">старший прапорщик</option>
+              <option value="прапорщик">прапорщик</option>
+              <option value="старшина">старшина</option>
+              <option value="старший сержант">старший сержант</option>
+              <option value="сержант">сержант</option>
+              <option value="младший сержант">младший сержант</option>
+              <option value="ефрейтор">ефрейтор</option>
+              <option value="рядовой">рядовой</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="commanderName">Фамилия и инициалы</label>
+            <input type="text" id="commanderName" class="form-input" placeholder="Фамилия И.О.">
+            <input type="hidden" id="chiefName">
           </div>
         </div>
       </div>
