@@ -55,6 +55,31 @@ function formatDateRussian(dateStr) {
   return dateStr;
 }
 
+// Автоподстановка курса и факультета в шапку строевой записки
+function updateHeaderText(text, faculty = null, course = null) {
+  if (!text) return text;
+  let res = String(text);
+  if (course !== null && course !== undefined) {
+    res = res.replace(/(\*|\d+)\s+курса(?![а-яА-ЯёЁ])/gi, `${course} курса`);
+    res = res.replace(/(\*|\d+)\s+курс(?![а-яА-ЯёЁ])/gi, `${course} курс`);
+  }
+  if (faculty !== null && faculty !== undefined) {
+    res = res.replace(/(\*|\d+)\s+факультет([а-яА-ЯёЁ]*)/gi, `${faculty} факультет$2`);
+  }
+  return res;
+}
+
+function updateHeaderSettings(faculty = null, course = null) {
+  state.settings.unitTitle = updateHeaderText(state.settings.unitTitle, faculty, course);
+  state.settings.chiefTitle = updateHeaderText(state.settings.chiefTitle, faculty, course);
+
+  const unitTitleEl = document.getElementById("unitTitle");
+  if (unitTitleEl) unitTitleEl.value = state.settings.unitTitle;
+
+  const chiefTitleEl = document.getElementById("chiefTitle");
+  if (chiefTitleEl) chiefTitleEl.value = state.settings.chiefTitle;
+}
+
 // 2. АЛГОРИТМЫ ОБРАБОТКИ ФИО И ПОЛА (1-в-1 ИЗ EXCEL_MANAGER.PY)
 
 /**
@@ -1025,6 +1050,19 @@ function confirmImportWithCourse() {
 
   state.absences = []; // сброс расхода для нового списка личного состава
 
+  // Автоподстановка курса и факультета в шапку строевой записки
+  let detectedFaculty = null;
+  let detectedCourse = targetCourse !== 'keep' ? parseInt(targetCourse, 10) : null;
+  for (const c of state.cadets) {
+    const parsed = parseGroupCode(c.group_num);
+    if (parsed.faculty && !detectedFaculty) detectedFaculty = parsed.faculty;
+    if (parsed.course && !detectedCourse) detectedCourse = parsed.course;
+    if (detectedFaculty && detectedCourse) break;
+  }
+  if (detectedFaculty || detectedCourse) {
+    updateHeaderSettings(detectedFaculty, detectedCourse);
+  }
+
   closeImportCourseModal();
 
   updateKpi();
@@ -1064,6 +1102,15 @@ function incrementAllCourses() {
       group_num: nextGroup
     };
   });
+
+  // Автоматически обновляем номер курса в шапке строевой записки
+  let newCourse = null;
+  if (state.cadets.length > 0) {
+    newCourse = state.cadets[0].course;
+  }
+  if (newCourse !== null) {
+    updateHeaderSettings(null, newCourse);
+  }
 
   updateKpi();
   updateCadetGroupFilterOptions();
@@ -1183,6 +1230,9 @@ function applyBulkCourseChange() {
       a.group_num = changeGroupCourse(a.group_num, targetCourse);
     }
   });
+
+  // Автоматически обновляем номер курса в шапке строевой записки
+  updateHeaderSettings(null, targetCourse);
 
   renderCadetsTable();
   updateCadetGroupFilterOptions();
@@ -1329,6 +1379,20 @@ function confirmWizardImport() {
   }));
 
   state.absences = [];
+
+  // Автоподстановка курса и факультета в шапку строевой записки
+  let detectedFaculty = null;
+  let detectedCourse = null;
+  for (const c of state.cadets) {
+    const parsed = parseGroupCode(c.group_num);
+    if (parsed.faculty && !detectedFaculty) detectedFaculty = parsed.faculty;
+    if (parsed.course && !detectedCourse) detectedCourse = parsed.course;
+    if (detectedFaculty && detectedCourse) break;
+  }
+  if (detectedFaculty || detectedCourse) {
+    updateHeaderSettings(detectedFaculty, detectedCourse);
+  }
+
   closeWizardModal();
 
   updateKpi();

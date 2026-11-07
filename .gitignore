@@ -56,3 +56,7 @@ test_*.xlsm
 
 # Log files
 *.log
+
+# Тестовые данные и образцы расхода
+rashod/
+*.xlsm

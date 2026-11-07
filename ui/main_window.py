@@ -1,5 +1,7 @@
 import os
 import sys
+import re
+from typing import Optional, Tuple
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QTableWidget, QTableWidgetItem, QComboBox,
@@ -14,7 +16,7 @@ from PyQt5.QtSvg import QSvgRenderer
 from database import Database
 from core.parsers import (
     parse_roster_excel, make_short_fio, change_group_course,
-    parse_group_code, get_course_from_group
+    parse_group_code, get_course_from_group, update_header_text
 )
 from core.models import normalize_gender, gender_to_ru
 from core.balance import compute_tri_slice_balance
@@ -856,8 +858,8 @@ class MainWindow(QMainWindow):
         sig_layout.addWidget(lbl_sig_title)
 
         form_sig = QFormLayout()
-        self.edit_unit = QLineEdit(self.db.get_setting("unit_title", "3 курс 1 факультета"))
-        self.edit_chief_title = QLineEdit(self.db.get_setting("chief_title", "Начальник 3 курса 1 факультета"))
+        self.edit_unit = QLineEdit(self.db.get_setting("unit_title", "* курс * факультета (автоматизированных систем управления)"))
+        self.edit_chief_title = QLineEdit(self.db.get_setting("chief_title", "Начальник * курса * факультета"))
         self.edit_chief_name = QLineEdit(self.db.get_setting("chief_name", "майор                          В.Медков"))
 
         form_sig.addRow("Наименование подразделения:", self.edit_unit)
@@ -929,11 +931,28 @@ class MainWindow(QMainWindow):
             course_display = cg if cg != "?" else str(c.get('course', 1))
             self.cb_cadets.addItem(f"{c['short_fio']} | {c['rank']} (гр. {c['group_num']}, {course_display} к.)", userData=c['id'])
 
+    def update_header_settings(self, faculty: Optional[int] = None, course: Optional[int] = None):
+        """Updates unitTitle and chiefTitle settings and UI fields with real course/faculty numbers."""
+        unit_title = self.db.get_setting("unit_title", "* курс * факультета (автоматизированных систем управления)")
+        chief_title = self.db.get_setting("chief_title", "Начальник * курса * факультета")
+
+        new_unit = update_header_text(unit_title, faculty=faculty, course=course)
+        new_chief = update_header_text(chief_title, faculty=faculty, course=course)
+
+        self.db.set_setting("unit_title", new_unit)
+        self.db.set_setting("chief_title", new_chief)
+
+        if hasattr(self, "edit_unit") and self.edit_unit is not None:
+            self.edit_unit.setText(new_unit)
+        if hasattr(self, "edit_chief_title") and self.edit_chief_title is not None:
+            self.edit_chief_title.setText(new_chief)
+
     def open_bulk_course_dialog(self):
         dlg = BulkCourseDialog(self)
         if dlg.exec_() == QDialog.Accepted:
             target_course = dlg.get_selected_course()
             self.db.bulk_set_course(target_course, update_group_numbers=True)
+            self.update_header_settings(course=target_course)
             self.update_group_filter_options()
             self.load_cadets_table()
             self.load_cadets_combo()
@@ -954,6 +973,11 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.Yes:
             self.db.bulk_increment_course(max_course=5, update_group_numbers=True)
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT course FROM cadets WHERE is_active = 1 AND status = 'active' LIMIT 1")
+            row = cursor.fetchone()
+            if row and row[0]:
+                self.update_header_settings(course=row[0])
             self.update_group_filter_options()
             self.load_cadets_table()
             self.load_cadets_combo()
@@ -1148,8 +1172,8 @@ class MainWindow(QMainWindow):
                     report_date=d_str,
                     cadets=cadets,
                     absences=absences,
-                    unit_title=self.db.get_setting("unit_title", "3 курс 1 факультета"),
-                    chief_title=self.db.get_setting("chief_title", "Начальник 3 курса 1 факультета"),
+                    unit_title=self.db.get_setting("unit_title", "* курс * факультета (автоматизированных систем управления)"),
+                    chief_title=self.db.get_setting("chief_title", "Начальник * курса * факультета"),
                     chief_name=self.db.get_setting("chief_name", "майор                          В.Медков"),
                     active_categories=self.db.get_distinct_categories()
                 )
@@ -1181,6 +1205,23 @@ class MainWindow(QMainWindow):
             if wizard.exec_() == QDialog.Accepted:
                 final_cadets = wizard.get_staged_cadets()
                 self.db.clear_and_import_cadets(final_cadets)
+
+                # Автоподстановка курса и факультета в шапку строевой записки
+                detected_faculty = None
+                detected_course = None
+                for c in final_cadets:
+                    grp = getattr(c, 'group_num', None) or (c.get('group_num') if isinstance(c, dict) else None)
+                    fac, crs, _ = parse_group_code(grp)
+                    if fac and not detected_faculty:
+                        detected_faculty = fac
+                    if crs and not detected_course:
+                        detected_course = crs
+                    if detected_faculty and detected_course:
+                        break
+
+                if detected_faculty or detected_course:
+                    self.update_header_settings(faculty=detected_faculty, course=detected_course)
+
                 self.update_group_filter_options()
                 self.load_cadets_table()
                 self.load_cadets_combo()

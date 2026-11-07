@@ -163,6 +163,19 @@ def get_course_from_group(group_str: str) -> str:
     return "?"
 
 
+def update_header_text(text: str, faculty: Optional[int] = None, course: Optional[int] = None) -> str:
+    """Updates faculty and course placeholders (* or existing numbers) in header titles."""
+    if not text:
+        return text
+    res = str(text)
+    if course is not None:
+        res = re.sub(r'(\*|\d+)\s+курса(?![а-яА-ЯёЁ])', f'{course} курса', res, flags=re.IGNORECASE)
+        res = re.sub(r'(\*|\d+)\s+курс(?![а-яА-ЯёЁ])', f'{course} курс', res, flags=re.IGNORECASE)
+    if faculty is not None:
+        res = re.sub(r'(\*|\d+)\s+факультет([а-яА-ЯёЁ]*)', rf'{faculty} факультет\g<2>', res, flags=re.IGNORECASE)
+    return res
+
+
 def extract_course(group_val: Any, explicit_course: Any = None) -> int:
     """Attempts to determine course (1..5) from explicit column or group number (e.g. '1280' -> 2, '221' -> 2)."""
     if explicit_course is not None:

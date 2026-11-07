@@ -157,3 +157,22 @@ class TestCourseTransformations:
         assert get_course_from_group("221") == "?"
         assert get_course_from_group("") == "?"
         assert get_course_from_group(None) == "?"
+
+    def test_update_header_text(self):
+        from core.parsers import update_header_text
+
+        # 1. From star placeholders
+        unit = "* курс * факультета (автоматизированных систем управления)"
+        chief = "Начальник * курса * факультета"
+        assert update_header_text(unit, faculty=1, course=2) == "2 курс 1 факультета (автоматизированных систем управления)"
+        assert update_header_text(chief, faculty=1, course=2) == "Начальник 2 курса 1 факультета"
+
+        # 2. Incrementing (+1 курс)
+        u_updated = update_header_text(unit, faculty=1, course=2)
+        c_updated = update_header_text(chief, faculty=1, course=2)
+        assert update_header_text(u_updated, course=3) == "3 курс 1 факультета (автоматизированных систем управления)"
+        assert update_header_text(c_updated, course=3) == "Начальник 3 курса 1 факультета"
+
+        # 3. Re-importing with another faculty/course
+        assert update_header_text(u_updated, faculty=2, course=4) == "4 курс 2 факультета (автоматизированных систем управления)"
+        assert update_header_text(c_updated, faculty=2, course=4) == "Начальник 4 курса 2 факультета"
