@@ -25,7 +25,7 @@ from ui.icons import (
     SVG_PLUS, SVG_TRASH, SVG_CALENDAR, SVG_EDIT, SVG_SAVE, SVG_MALE,
     SVG_FEMALE, SVG_GRADUATE, SVG_FAST_FORWARD, SVG_CHECK, SVG_CROSS,
     SVG_SCALE, SVG_ALERT, SVG_SEARCH, SVG_FILTER, SVG_REFRESH, SVG_INFO,
-    create_svg_icon
+    SVG_CODE, create_svg_icon
 )
 
 POPUP_STYLE = """
@@ -413,7 +413,7 @@ class BulkCourseDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ConsumABLE — Управление строевой запиской")
+        self.setWindowTitle("ConsumABLE v1.3.3 — Управление строевой запиской")
         self.resize(1200, 840)
         self.db = Database()
 
@@ -444,6 +444,39 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_cadets_tab(), icon_cadets, "Личный состав")
         self.tabs.addTab(self.create_settings_tab(), icon_settings, "Справочник и настройки")
         main_layout.addWidget(self.tabs)
+
+        # Нижняя строка состояния (StatusBar) с информацией об авторе
+        status_bar = self.statusBar()
+        status_bar.setStyleSheet("""
+            QStatusBar {
+                background-color: #F8FAFC;
+                border-top: 1px solid #E2E8F0;
+                color: #64748B;
+                padding: 4px 10px;
+                font-size: 11px;
+            }
+            QStatusBar QLabel {
+                color: #64748B;
+                font-size: 11px;
+            }
+        """)
+
+        status_left = QLabel("ConsumABLE v1.3.3 • Система автоматизации строевого учета")
+        status_bar.addWidget(status_left)
+
+        author_widget = QWidget()
+        author_layout = QHBoxLayout(author_widget)
+        author_layout.setContentsMargins(0, 0, 0, 0)
+        author_layout.setSpacing(6)
+
+        author_icon = QLabel()
+        author_icon.setPixmap(create_svg_icon(SVG_CODE, "#64748B", 13).pixmap(13, 13))
+        author_label = QLabel("Разработка: Журавлев Алексей")
+        author_label.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 500;")
+
+        author_layout.addWidget(author_icon)
+        author_layout.addWidget(author_label)
+        status_bar.addPermanentWidget(author_widget)
 
     def create_today_tab(self):
         tab = QWidget()
@@ -830,6 +863,38 @@ class MainWindow(QMainWindow):
         sig_layout.addWidget(btn_save_sig, alignment=Qt.AlignRight)
 
         layout.addWidget(card_signatures)
+
+        # Информационный блок / Карточка «О программе»
+        card_about = QFrame()
+        card_about.setObjectName("cardFrame")
+        about_layout = QVBoxLayout(card_about)
+        about_layout.setSpacing(10)
+
+        about_header = QHBoxLayout()
+        about_header.setSpacing(8)
+        lbl_info_icon = QLabel()
+        lbl_info_icon.setPixmap(create_svg_icon(SVG_INFO, "#2563EB", 18).pixmap(18, 18))
+        lbl_about_title = QLabel("О программе")
+        lbl_about_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #1E293B;")
+        about_header.addWidget(lbl_info_icon)
+        about_header.addWidget(lbl_about_title)
+        about_header.addStretch()
+        about_layout.addLayout(about_header)
+
+        lbl_app_name = QLabel("ConsumABLE v1.3.3")
+        lbl_app_name.setStyleSheet("font-size: 14px; font-weight: 700; color: #2563EB;")
+        about_layout.addWidget(lbl_app_name)
+
+        lbl_author = QLabel("Автор / Создатель: Журавлев Алексей")
+        lbl_author.setStyleSheet("font-size: 13px; font-weight: 600; color: #1E293B;")
+        about_layout.addWidget(lbl_author)
+
+        lbl_purpose = QLabel("Назначение: Автоматизация учета и расхода личного состава с формированием строевых записок.")
+        lbl_purpose.setStyleSheet("font-size: 12px; color: #64748B;")
+        lbl_purpose.setWordWrap(True)
+        about_layout.addWidget(lbl_purpose)
+
+        layout.addWidget(card_about)
         layout.addStretch()
         return tab
 
