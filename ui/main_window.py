@@ -413,7 +413,7 @@ class BulkCourseDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ConsumABLE v1.3.3 — Управление строевой запиской")
+        self.setWindowTitle("ConsumABLE v1.3.4 — Управление строевой запиской")
         self.resize(1200, 840)
         self.db = Database()
 
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        status_left = QLabel("ConsumABLE v1.3.3 • Система автоматизации строевого учета")
+        status_left = QLabel("ConsumABLE v1.3.4 • Система автоматизации строевого учета")
         status_bar.addWidget(status_left)
 
         author_widget = QWidget()
@@ -471,7 +471,7 @@ class MainWindow(QMainWindow):
 
         author_icon = QLabel()
         author_icon.setPixmap(create_svg_icon(SVG_CODE, "#64748B", 13).pixmap(13, 13))
-        author_label = QLabel("Разработка: Журавлев Алексей")
+        author_label = QLabel("Создал: Журавлев Алексей")
         author_label.setStyleSheet("color: #64748B; font-size: 11px; font-weight: 500;")
 
         author_layout.addWidget(author_icon)
@@ -730,6 +730,14 @@ class MainWindow(QMainWindow):
         btn_bulk_course.clicked.connect(self.open_bulk_course_dialog)
         top_panel.addWidget(btn_bulk_course)
 
+        btn_inc_course = QPushButton("+1 курс")
+        btn_inc_course.setObjectName("incCourseBtn")
+        btn_inc_course.setFixedHeight(36)
+        btn_inc_course.setToolTip("Повысить курс всех учебных групп на +1 (1280 -> 1380)")
+        btn_inc_course.setIcon(create_svg_icon(SVG_FAST_FORWARD, "#FFFFFF", 14))
+        btn_inc_course.clicked.connect(self.increment_all_courses)
+        top_panel.addWidget(btn_inc_course)
+
         # Фильтр по курсу
         self.combo_course_filter = QComboBox()
         self.combo_course_filter.setView(QListView())
@@ -881,7 +889,7 @@ class MainWindow(QMainWindow):
         about_header.addStretch()
         about_layout.addLayout(about_header)
 
-        lbl_app_name = QLabel("ConsumABLE v1.3.3")
+        lbl_app_name = QLabel("ConsumABLE v1.3.4")
         lbl_app_name.setStyleSheet("font-size: 14px; font-weight: 700; color: #2563EB;")
         about_layout.addWidget(lbl_app_name)
 
@@ -934,6 +942,26 @@ class MainWindow(QMainWindow):
                 self,
                 "Успех",
                 f"Курс всех групп успешно изменен на {target_course} курс.\nНомера групп обновлены (например, 1280 -> 1{target_course}80)."
+            )
+
+    def increment_all_courses(self):
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение",
+            "Повысить курс всех учебных групп на +1?\n\nВ номерах групп 1X** цифра курса увеличится (например, 1280 -> 1380), курсанты старше 5 курса будут переведены в статус 'выпущен'.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply == QMessageBox.Yes:
+            self.db.bulk_increment_course(max_course=5, update_group_numbers=True)
+            self.update_group_filter_options()
+            self.load_cadets_table()
+            self.load_cadets_combo()
+            self.load_daily_data()
+            QMessageBox.information(
+                self,
+                "Успех",
+                "Курс всех учебных групп успешно повышен на +1.\nНомера групп автоматически обновлены."
             )
 
     def on_course_segmented_clicked(self, course_id: int):

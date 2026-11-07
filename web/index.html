@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConsumABLE v1.3.3 — Управление строевой запиской</title>
+  <title>ConsumABLE v1.3.4 — Управление строевой запиской</title>
   <link rel="stylesheet" href="style.css">
   <!-- SheetJS (xlsx) для быстрого чтения и парсинга базы курсантов -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -27,7 +27,7 @@
         <div>
           <div class="brand-title">
             ConsumABLE
-            <span class="brand-badge">v1.3.3</span>
+            <span class="brand-badge">v1.3.4</span>
           </div>
           <div class="brand-subtitle">Автономное управление строевой запиской курса</div>
         </div>
@@ -399,6 +399,12 @@
               </svg>
               Сменить курс всех групп
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="incrementAllCourses()" title="Повысить курс всех учебных групп на +1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+              +1 курс
+            </button>
           </div>
         </div>
 
@@ -529,13 +535,45 @@
             </svg>
             Интерактивный предпросмотр строевой записки
           </div>
-          <button class="btn btn-primary" onclick="generateExcelReport()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="printActiveReport()" title="Печать активного бланка расхода на А4">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              Печать (А4)
+            </button>
+            <button class="btn btn-primary" onclick="generateExcelReport()" title="Скачать строевую записку (.xlsx)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Скачать Excel (.xlsx)
+            </button>
+          </div>
+        </div>
+
+        <!-- Переключатель срезов предпросмотра (Общий / Парни / Девушки) -->
+        <div class="preview-tabs-nav">
+          <button class="preview-tab-btn active" data-slice="total" onclick="switchPreviewSlice('total')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
             </svg>
-            Скачать строевую записку (.xlsx)
+            Общий расход
+          </button>
+          <button class="preview-tab-btn male" data-slice="male" onclick="switchPreviewSlice('male')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <circle cx="10" cy="14" r="5"/><line x1="19" y1="5" x2="13.6" y2="10.4"/><polyline points="15 5 19 5 19 9"/>
+            </svg>
+            Парни (Мужской)
+          </button>
+          <button class="preview-tab-btn female" data-slice="female" onclick="switchPreviewSlice('female')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <circle cx="12" cy="9" r="5"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>
+            </svg>
+            Девушки (Женский)
           </button>
         </div>
 
@@ -545,7 +583,7 @@
 
     <!-- Подвал приложения с информацией об авторе -->
     <footer class="app-footer">
-      <span>ConsumABLE v1.3.3</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
+      <span>ConsumABLE v1.3.4</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
     </footer>
 
   </main>
@@ -571,19 +609,19 @@
       </div>
 
       <div class="modal-body">
-        <p style="font-size: 14px; color: var(--text-main); font-weight: 700; margin-bottom: 6px;">
-          Какой курс установить для загружаемых групп?
+        <p id="importCourseModalPrompt" style="font-size: 14px; color: var(--text-main); font-weight: 700; margin-bottom: 6px;">
+          Обнаружен 2 курс в номерах групп. Установить актуальный курс:
         </p>
         <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.4;">
           При выборе курса у всех 4-значных номеров групп (например, 1280) вторая цифра будет автоматически заменена на выбранный курс (станет 1380).
         </p>
 
         <div class="course-choice-grid">
-          <button type="button" class="course-choice-btn" data-course="1" onclick="selectImportCourse(1)">1 курс</button>
-          <button type="button" class="course-choice-btn" data-course="2" onclick="selectImportCourse(2)">2 курс</button>
-          <button type="button" class="course-choice-btn selected" data-course="3" onclick="selectImportCourse(3)">3 курс</button>
-          <button type="button" class="course-choice-btn" data-course="4" onclick="selectImportCourse(4)">4 курс</button>
-          <button type="button" class="course-choice-btn" data-course="5" onclick="selectImportCourse(5)">5 курс</button>
+          <button type="button" class="course-choice-btn" data-course="1" onclick="selectImportCourse(1)">1</button>
+          <button type="button" class="course-choice-btn" data-course="2" onclick="selectImportCourse(2)">2</button>
+          <button type="button" class="course-choice-btn selected" data-course="3" onclick="selectImportCourse(3)">3</button>
+          <button type="button" class="course-choice-btn" data-course="4" onclick="selectImportCourse(4)">4</button>
+          <button type="button" class="course-choice-btn" data-course="5" onclick="selectImportCourse(5)">5</button>
           <button type="button" class="course-choice-btn" data-course="keep" onclick="selectImportCourse('keep')">Оставить как в файле</button>
         </div>
 

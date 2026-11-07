@@ -893,6 +893,52 @@ select option:hover, select option:checked, .dropdown-item:hover, .autocomplete-
   border-color: #BE185D;
 }
 
+/* Предпросмотр: переключатели срезов */
+.preview-tabs-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.preview-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preview-tab-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-main);
+}
+
+.preview-tab-btn.active {
+  background: var(--primary);
+  color: #FFFFFF;
+  border-color: var(--primary);
+}
+
+.preview-tab-btn.male.active {
+  background: #1D4ED8;
+  border-color: #1D4ED8;
+  color: #FFFFFF;
+}
+
+.preview-tab-btn.female.active {
+  background: #BE185D;
+  border-color: #BE185D;
+  color: #FFFFFF;
+}
+
 .slice-balance-banner {
   padding: 10px 16px;
   border-radius: var(--radius-sm);
@@ -1038,4 +1084,93 @@ select option:hover, select option:checked, .dropdown-item:hover, .autocomplete-
 .app-footer strong {
   color: var(--text-main);
   font-weight: 600;
+}
+
+/* ==========================================================================
+   Печать бланка (А4 Portrait)
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Скрываем все элементы интерфейса, кроме контейнера предпросмотра */
+  .app-header,
+  .tabs-nav,
+  .card-header,
+  .preview-tabs-nav,
+  .app-footer,
+  .toast-container,
+  .modal-backdrop,
+  .btn,
+  .course-filter-bar,
+  .slice-tabs-nav,
+  .slice-balance-banner,
+  .card:not(#previewTab),
+  .tab-pane:not(#previewTab) {
+    display: none !important;
+  }
+
+  #previewTab {
+    display: block !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #livePreviewContainer {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .excel-preview-box {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: 100% !important;
+    font-family: "Times New Roman", Times, serif !important;
+    color: #000000 !important;
+  }
+
+  .excel-preview-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9.5pt !important;
+    margin-bottom: 12px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .excel-preview-table th,
+  .excel-preview-table td {
+    border: 1px solid #000000 !important;
+    padding: 3px 4px !important;
+    color: #000000 !important;
+    line-height: 1.2 !important;
+  }
+
+  .excel-preview-table th {
+    background-color: #F2F2F2 !important;
+    font-weight: bold !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .excel-preview-box div {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 }

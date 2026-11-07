@@ -27,6 +27,7 @@ const state = {
   ],
   standardCategories: ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны", "Увольнение"],
   currentSlice: "total",
+  activePreviewSlice: "total",
   stagingCadets: []
 };
 
@@ -449,8 +450,8 @@ function buildExcelSheet(ws, sheetTitleSuffix, cadets, absences, categories) {
 
   if (hasMales && hasFemales) {
     const genderConfigs = [
-      { label: "Расход личного состава (Мужчины / Юноши)", val: "М", val2: "male", numIdx: groups.length + 1 },
-      { label: "Расход личного состава (Женщины / Девушки)", val: "Ж", val2: "female", numIdx: groups.length + 2 }
+      { label: "Мужчины", val: "М", val2: "male", numIdx: groups.length + 1 },
+      { label: "Женщины", val: "Ж", val2: "female", numIdx: groups.length + 2 }
     ];
 
     genderConfigs.forEach(g => {
@@ -497,7 +498,7 @@ function buildExcelSheet(ws, sheetTitleSuffix, cadets, absences, categories) {
   ws.getRow(currRow).height = 18.0;
   const totalNumIdx = (hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
   ws.getCell(currRow, 2).value = totalNumIdx;
-  ws.getCell(currRow, 3).value = "ИТОГО общий расход";
+  ws.getCell(currRow, 3).value = "Всего";
 
   if (groups.length > 0) {
     const totalPsVal = cadets.length;
@@ -922,14 +923,33 @@ function openImportCourseModal(cadets) {
   const modal = document.getElementById("importCourseModal");
   if (!modal) return;
 
-  let defaultCourse = 3;
-  if (cadets.length > 0 && cadets[0].group_num) {
-    const cVal = getCourseFromGroup(cadets[0].group_num);
+  let detectedCourse = 2;
+  const courseCounts = {};
+  cadets.forEach(c => {
+    const cVal = getCourseFromGroup(c.group_num);
     if (cVal !== '?' && !isNaN(parseInt(cVal, 10))) {
-      defaultCourse = parseInt(cVal, 10);
+      courseCounts[cVal] = (courseCounts[cVal] || 0) + 1;
+    }
+  });
+
+  let maxCount = 0;
+  Object.entries(courseCounts).forEach(([crs, cnt]) => {
+    if (cnt > maxCount) {
+      maxCount = cnt;
+      detectedCourse = parseInt(crs, 10);
+    }
+  });
+
+  const promptEl = document.getElementById("importCourseModalPrompt");
+  if (promptEl) {
+    if (maxCount > 0) {
+      promptEl.textContent = `Обнаружен ${detectedCourse} курс в номерах групп. Установить актуальный курс:`;
+    } else {
+      promptEl.textContent = `Какой курс установить для загружаемых групп?`;
     }
   }
-  selectImportCourse(defaultCourse);
+
+  selectImportCourse(detectedCourse);
   modal.classList.add("active");
 }
 
@@ -1018,10 +1038,49 @@ function confirmImportWithCourse() {
   showToast(`Успешно загружено курсантов: ${state.cadets.length} чел.${targetCourse !== 'keep' ? ` (${targetCourse} курс)` : ''}`, "success");
 }
 
+function incrementAllCourses() {
+  if (state.cadets.length === 0) {
+    showToast("База личного состава пуста!", "danger");
+    return;
+  }
+
+  state.cadets = state.cadets.map(c => {
+    const nextCourse = (c.course || 1) + 1;
+    const nextGroup = changeGroupCourse(c.group_num, nextCourse);
+    return {
+      ...c,
+      course: nextCourse,
+      group_num: nextGroup,
+      status: nextCourse > 5 ? 'graduated' : c.status
+    };
+  });
+
+  state.absences = state.absences.map(a => {
+    const nextCourse = (a.course || 1) + 1;
+    const nextGroup = changeGroupCourse(a.group_num, nextCourse);
+    return {
+      ...a,
+      course: nextCourse,
+      group_num: nextGroup
+    };
+  });
+
+  updateKpi();
+  updateCadetGroupFilterOptions();
+  renderCadetsTable();
+  updateCadetSelectOptions();
+  renderAbsencesTable();
+  calculateAndRenderBalance();
+  renderLivePreview();
+
+  showToast("Курс всех учебных групп успешно повышен на +1!", "success");
+}
+
 window.openImportCourseModal = openImportCourseModal;
 window.closeImportCourseModal = closeImportCourseModal;
 window.selectImportCourse = selectImportCourse;
 window.confirmImportWithCourse = confirmImportWithCourse;
+window.incrementAllCourses = incrementAllCourses;
 
 // -------------------------------------------------------------
 // STAGING WIZARD ДЛЯ WEB-ВЕРСИИ
@@ -1495,15 +1554,54 @@ function deleteReasonType(typeId) {
   showToast("Причина удалена", "info");
 }
 
-function renderLivePreview() {
+function switchPreviewSlice(slice) {
+  state.activePreviewSlice = slice;
+  document.querySelectorAll(".preview-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.slice === slice);
+  });
+  renderLivePreview(slice);
+}
+
+function printActiveReport() {
+  if (state.cadets.length === 0) {
+    showToast("Сначала загрузите базу личного состава!", "danger");
+    return;
+  }
+  window.print();
+}
+
+window.switchPreviewSlice = switchPreviewSlice;
+window.printActiveReport = printActiveReport;
+window.generateExcelReport = generateExcelReport;
+
+function renderLivePreview(slice = state.activePreviewSlice || 'total') {
   const container = document.getElementById("livePreviewContainer");
   if (!container) return;
 
-  if (state.cadets.length === 0) {
+  let cadets = state.cadets;
+  let absences = state.absences;
+  let titleSuffix = "";
+
+  if (slice === 'male') {
+    cadets = state.cadets.filter(c => c.gender === 'М' || c.gender === 'male');
+    absences = state.absences.filter(a => a.gender === 'М' || a.gender === 'male');
+    titleSuffix = "(Мужской состав)";
+  } else if (slice === 'female') {
+    cadets = state.cadets.filter(c => c.gender === 'Ж' || c.gender === 'female');
+    absences = state.absences.filter(a => a.gender === 'Ж' || a.gender === 'female');
+    titleSuffix = "(Женский состав)";
+  }
+
+  if (cadets.length === 0) {
+    const emptyMsg = slice === 'male'
+      ? "В базе нет курсантов мужского пола"
+      : slice === 'female'
+      ? "В базе нет курсантов женского пола"
+      : "База личного состава пуста";
     container.innerHTML = `
       <div class="empty-state">
         <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        <div class="empty-state-title">База личного состава пуста</div>
+        <div class="empty-state-title">${emptyMsg}</div>
         <p>Загрузите список курсантов из Excel или добавьте их вручную для формирования строевой записки.</p>
       </div>
     `;
@@ -1511,13 +1609,13 @@ function renderLivePreview() {
   }
 
   const standardCategories = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"];
-  const activeAbsenceCategories = [...new Set(state.absences.map(a => a.category))];
+  const activeAbsenceCategories = [...new Set(absences.map(a => a.category))];
   const orderedCats = standardCategories.filter(c => activeAbsenceCategories.includes(c) || true);
   const otherCats = activeAbsenceCategories.filter(c => !standardCategories.includes(c));
   const categories = [...orderedCats, ...otherCats];
 
   const groupOrderMap = {};
-  state.cadets.forEach(c => {
+  cadets.forEach(c => {
     if (!(c.group_num in groupOrderMap)) groupOrderMap[c.group_num] = c.sort_order || 0;
   });
   const groups = Object.keys(groupOrderMap).sort((a, b) => groupOrderMap[a] - groupOrderMap[b]);
@@ -1529,9 +1627,9 @@ function renderLivePreview() {
 
   let groupRowsHtml = "";
   groups.forEach((grp, idx) => {
-    const grpCadets = state.cadets.filter(c => c.group_num === grp);
+    const grpCadets = cadets.filter(c => c.group_num === grp);
     const ps = grpCadets.length;
-    const grpAbs = state.absences.filter(a => a.group_num === grp);
+    const grpAbs = absences.filter(a => a.group_num === grp);
     const grpAbsTotal = grpAbs.length;
     const nl = ps - grpAbsTotal;
     totalPs += ps;
@@ -1556,18 +1654,18 @@ function renderLivePreview() {
     `;
   });
 
-  const hasMales = state.cadets.some(c => c.gender === 'М' || c.gender === 'male');
-  const hasFemales = state.cadets.some(c => c.gender === 'Ж' || c.gender === 'female');
+  const hasMales = cadets.some(c => c.gender === 'М' || c.gender === 'male');
+  const hasFemales = cadets.some(c => c.gender === 'Ж' || c.gender === 'female');
 
   let genderRowsHtml = "";
-  if (hasMales && hasFemales) {
+  if (slice === 'total' && hasMales && hasFemales) {
     genderRowsHtml = [
-      { label: "Расход личного состава (Мужчины / Юноши)", val: "М", val2: "male", numIdx: groups.length + 1 },
-      { label: "Расход личного состава (Женщины / Девушки)", val: "Ж", val2: "female", numIdx: groups.length + 2 }
+      { label: "Мужчины", val: "М", val2: "male", numIdx: groups.length + 1 },
+      { label: "Женщины", val: "Ж", val2: "female", numIdx: groups.length + 2 }
     ].map(g => {
-      const gCadets = state.cadets.filter(c => c.gender === g.val || c.gender === g.val2);
+      const gCadets = cadets.filter(c => c.gender === g.val || c.gender === g.val2);
       const gPs = gCadets.length;
-      const gAbs = state.absences.filter(a => a.gender === g.val || a.gender === g.val2);
+      const gAbs = absences.filter(a => a.gender === g.val || a.gender === g.val2);
       const gNl = gPs - gAbs.length;
 
       const rowCounts = {};
@@ -1589,11 +1687,11 @@ function renderLivePreview() {
   }
 
   const totalAbsAll = Object.values(catTotals).reduce((sum, v) => sum + v, 0);
-  const totalNumIdx = (hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
+  const totalNumIdx = (slice === 'total' && hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
   const totalRowHtml = `
     <tr class="bold-cell">
       <td>${totalNumIdx}</td>
-      <td>ИТОГО общий расход</td>
+      <td>Всего</td>
       <td>${totalPs}</td>
       <td>${totalNl}</td>
       ${categories.map(c => `<td>${catTotals[c] > 0 ? catTotals[c] : ""}</td>`).join("")}
@@ -1602,26 +1700,28 @@ function renderLivePreview() {
   `;
 
   let absencesRowsHtml = "";
-  if (state.absences.length === 0) {
+  if (absences.length === 0) {
     absencesRowsHtml = `<tr><td colspan="${6 + categories.length}" style="text-align: center; padding: 12px;">Все курсанты находятся в строю</td></tr>`;
   } else {
-    state.absences.forEach((a, idx) => {
+    absences.forEach((a, idx) => {
       absencesRowsHtml += `
         <tr>
           <td>${idx + 1}</td>
-          <td>${escapeHtml(a.rank)}</td>
-          <td colspan="3">${escapeHtml(a.short_fio)}</td>
-          <td colspan="2">${escapeHtml(a.type_name)}</td>
-          <td>${escapeHtml(a.group_num)}</td>
+          <td>${escapeHtml(a.rank || "курсант")}</td>
+          <td colspan="3">${escapeHtml(a.short_fio || a.fio || "")}</td>
+          <td colspan="2">${escapeHtml(a.type_name || "")}</td>
+          <td>${escapeHtml(a.group_num || "")}</td>
           <td colspan="${categories.length - 2}">${escapeHtml(a.note || "")}</td>
         </tr>
       `;
     });
   }
 
+  const fullTitle = titleSuffix ? `РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА ${titleSuffix}` : "РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА";
+
   container.innerHTML = `
     <div class="excel-preview-box">
-      <div style="text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 4px;">РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА</div>
+      <div style="text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 4px;">${fullTitle}</div>
       <div style="text-align: center; font-size: 13px; margin-bottom: 4px;">${escapeHtml(state.settings.unitTitle)}</div>
       <div style="text-align: center; font-size: 13px; margin-bottom: 16px;">${escapeHtml(formatDateRussian(state.settings.reportDate))}</div>
 
