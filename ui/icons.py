@@ -50,6 +50,8 @@ SVG_INFO = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 
 SVG_CODE = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'''
 
+SVG_PRINT = '''<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>'''
+
 
 def create_svg_icon(svg_str: str, color: str = "#2563EB", size: int = 18) -> QIcon:
     """Renders an SVG string into a high-DPI QIcon with a custom color and size."""

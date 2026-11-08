@@ -7,10 +7,11 @@ from PyQt5.QtWidgets import (
     QLabel, QPushButton, QTableWidget, QTableWidgetItem, QComboBox,
     QLineEdit, QDateEdit, QFileDialog, QMessageBox, QTabWidget,
     QHeaderView, QFrame, QAbstractItemView, QDialog, QFormLayout, QDialogButtonBox,
-    QButtonGroup, QListView
+    QButtonGroup, QListView, QRadioButton
 )
-from PyQt5.QtCore import Qt, QDate, QByteArray, QSize
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
+from PyQt5.QtCore import Qt, QDate, QByteArray, QSize, QSizeF
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QPageLayout, QPageSize, QTextDocument
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtSvg import QSvgRenderer
 
 from database import Database
@@ -28,7 +29,7 @@ from ui.icons import (
     SVG_PLUS, SVG_TRASH, SVG_CALENDAR, SVG_EDIT, SVG_SAVE, SVG_MALE,
     SVG_FEMALE, SVG_GRADUATE, SVG_FAST_FORWARD, SVG_CHECK, SVG_CROSS,
     SVG_SCALE, SVG_ALERT, SVG_SEARCH, SVG_FILTER, SVG_REFRESH, SVG_INFO,
-    SVG_CODE, create_svg_icon
+    SVG_CODE, SVG_PRINT, create_svg_icon
 )
 
 POPUP_STYLE = """
@@ -183,6 +184,16 @@ QPushButton#exportBtn {
 }
 QPushButton#exportBtn:hover {
     background-color: #047857;
+}
+
+QPushButton#printBtn {
+    background-color: #F8FAFC;
+    color: #1E293B;
+    border: 1px solid #CBD5E1;
+}
+QPushButton#printBtn:hover {
+    background-color: #F1F5F9;
+    border-color: #94A3B8;
 }
 
 QPushButton#importBtn {
@@ -413,10 +424,102 @@ class BulkCourseDialog(QDialog):
         return self.cb_course.currentIndex() + 1
 
 
+class PrintExpenseDialog(QDialog):
+    """Dialog to choose which expense sheet variant to print (A4 Landscape)."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Печать суточного расхода (А4 Альбомная)")
+        self.setFixedWidth(460)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        header_lbl = QLabel("Печать суточного расхода (А4 Альбомная)")
+        header_lbl.setStyleSheet("font-size: 15px; font-weight: 700; color: #1E293B;")
+        layout.addWidget(header_lbl)
+
+        desc_lbl = QLabel("Выберите вариант ведомости для вывода на печать на листах формата А4 в альбомной ориентации:")
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("font-size: 12px; color: #64748B; margin-bottom: 4px;")
+        layout.addWidget(desc_lbl)
+
+        options_box = QFrame()
+        options_box.setStyleSheet("background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px;")
+        opt_layout = QVBoxLayout(options_box)
+        opt_layout.setSpacing(10)
+
+        self.rb_all = QRadioButton("Общий расход (весь личный состав курса)")
+        self.rb_all.setChecked(True)
+        self.rb_male = QRadioButton("Мужской состав (Парни)")
+        self.rb_female = QRadioButton("Женский состав (Девушки)")
+        self.rb_all_three = QRadioButton("Печатать все 3 ведомости (каждая с нового листа)")
+
+        for rb in (self.rb_all, self.rb_male, self.rb_female, self.rb_all_three):
+            rb.setStyleSheet("font-size: 13px; font-weight: 500; color: #1E293B;")
+            opt_layout.addWidget(rb)
+
+        layout.addWidget(options_box)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        btn_cancel = QPushButton("Отмена")
+        btn_cancel.setFixedHeight(34)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #334155;
+                font-weight: 600;
+                font-size: 13px;
+                border-radius: 6px;
+                padding: 0 16px;
+                border: 1px solid #CBD5E1;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
+            }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+
+        btn_print = QPushButton("Сформировать и напечатать")
+        btn_print.setFixedHeight(34)
+        btn_print.setIcon(create_svg_icon(SVG_PRINT, "#FFFFFF", 16))
+        btn_print.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: #FFFFFF;
+                font-weight: 600;
+                font-size: 13px;
+                border-radius: 6px;
+                padding: 0 16px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #1D4ED8;
+            }
+        """)
+        btn_print.clicked.connect(self.accept)
+        btn_layout.addWidget(btn_print)
+
+        layout.addLayout(btn_layout)
+
+    def get_selected_variant(self) -> str:
+        if self.rb_male.isChecked():
+            return "male"
+        elif self.rb_female.isChecked():
+            return "female"
+        elif self.rb_all_three.isChecked():
+            return "all_three"
+        return "all"
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ConsumABLE v1.3.5 — Управление строевой запиской")
+        self.setWindowTitle("ConsumABLE v1.3.6 — Управление строевой запиской")
         self.resize(1200, 840)
         self.db = Database()
 
@@ -464,7 +567,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        status_left = QLabel("ConsumABLE v1.3.5 • Система автоматизации строевого учета")
+        status_left = QLabel("ConsumABLE v1.3.6 • Система автоматизации строевого учета")
         status_bar.addWidget(status_left)
 
         author_widget = QWidget()
@@ -518,6 +621,13 @@ class MainWindow(QMainWindow):
         btn_export.setIcon(create_svg_icon(SVG_EXPORT, "#FFFFFF", 16))
         btn_export.clicked.connect(self.export_excel)
         top_bar.addWidget(btn_export)
+
+        btn_print = QPushButton("Печать расхода (А4)")
+        btn_print.setObjectName("printBtn")
+        btn_print.setFixedHeight(36)
+        btn_print.setIcon(create_svg_icon(SVG_PRINT, "#1E293B", 16))
+        btn_print.clicked.connect(self.print_expense)
+        top_bar.addWidget(btn_print)
 
         layout.addLayout(top_bar)
 
@@ -910,7 +1020,7 @@ class MainWindow(QMainWindow):
         about_header.addStretch()
         about_layout.addLayout(about_header)
 
-        lbl_app_name = QLabel("ConsumABLE v1.3.5")
+        lbl_app_name = QLabel("ConsumABLE v1.3.6")
         lbl_app_name.setStyleSheet("font-size: 14px; font-weight: 700; color: #2563EB;")
         about_layout.addWidget(lbl_app_name)
 
@@ -1218,6 +1328,246 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка экспорта", f"Не удалось сформировать файл:\n{e}")
+
+    def print_expense(self):
+        cadets = self.db.get_all_cadets()
+        if not cadets:
+            QMessageBox.warning(
+                self, "Внимание",
+                "Список личного состава пуст.\nСначала загрузите или добавьте курсантов."
+            )
+            return
+
+        dlg = PrintExpenseDialog(self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        variant = dlg.get_selected_variant()
+        d_str = self.get_selected_date_str()
+
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setPageOrientation(QPageLayout.Landscape)
+        printer.setPageSize(QPageSize(QPageSize.A4))
+
+        print_dlg = QPrintDialog(printer, self)
+        print_dlg.setWindowTitle("Печать суточного расхода (А4 Альбомная)")
+        if print_dlg.exec_() != QPrintDialog.Accepted:
+            return
+
+        try:
+            if variant == "all_three":
+                sheets = [
+                    self.generate_print_sheet_html("all", d_str),
+                    self.generate_print_sheet_html("male", d_str),
+                    self.generate_print_sheet_html("female", d_str)
+                ]
+                html_content = '<div style="page-break-after: always;">' + '</div><div style="page-break-after: always;">'.join(sheets[:-1]) + '</div><div>' + sheets[-1] + '</div>'
+            else:
+                html_content = self.generate_print_sheet_html(variant, d_str)
+
+            doc = QTextDocument()
+            page_rect = printer.pageRect(QPrinter.Point)
+            doc.setPageSize(QSizeF(page_rect.width(), page_rect.height()))
+            doc.setHtml(html_content)
+            doc.print_(printer)
+            self.statusBar().showMessage("Документ успешно отправлен на печать", 4000)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка печати", f"Не удалось отправить документ на печать:\n{e}")
+
+    def generate_print_sheet_html(self, slice_name: str, target_date: str) -> str:
+        all_cadets = self.db.get_all_cadets()
+        all_absences = self.db.get_absences_for_date(target_date)
+
+        if slice_name == "male":
+            cadets = [c for c in all_cadets if normalize_gender(c.get("gender")) == "М"]
+            absences = [a for a in all_absences if normalize_gender(a.get("gender")) == "М"]
+            category_subtitle = "(Мужской состав)"
+        elif slice_name == "female":
+            cadets = [c for c in all_cadets if normalize_gender(c.get("gender")) == "Ж"]
+            absences = [a for a in all_absences if normalize_gender(a.get("gender")) == "Ж"]
+            category_subtitle = "(Женский состав)"
+        else:
+            cadets = all_cadets
+            absences = all_absences
+            category_subtitle = "(Общий состав)"
+
+        ps_total = len(cadets)
+        abs_total = len(absences)
+        nl_total = ps_total - abs_total
+
+        unit_title = self.db.get_setting("unit_title", "")
+        chief_title = self.db.get_setting("chief_title", "")
+        commander_rank = self.db.get_setting("commander_rank", "")
+        commander_name = self.db.get_setting("commander_name", "")
+
+        date_formatted = QDate.fromString(target_date, "yyyy-MM-dd").toString("dd.MM.yyyy") + " г."
+
+        standard_cats = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"]
+        active_cats = list(dict.fromkeys(a.get("category", "") for a in absences if a.get("category")))
+        categories = [c for c in standard_cats if c in active_cats or True] + [c for c in active_cats if c not in standard_cats]
+
+        # Group ordering
+        groups = []
+        for c in cadets:
+            g = c.get("group_num")
+            if g and g not in groups:
+                groups.append(g)
+
+        cat_totals = {c: 0 for c in categories}
+        group_rows = []
+        for idx, grp in enumerate(groups, 1):
+            grp_cadets = [c for c in cadets if c.get("group_num") == grp]
+            grp_abs = [a for a in absences if a.get("group_num") == grp]
+            ps = len(grp_cadets)
+            abs_cnt = len(grp_abs)
+            nl = ps - abs_cnt
+
+            row_cats = {}
+            for cat in categories:
+                cnt = len([a for a in grp_abs if a.get("category") == cat])
+                row_cats[cat] = cnt
+                cat_totals[cat] += cnt
+
+            cat_cells = "".join(f"<td>{row_cats[c] if row_cats[c] > 0 else ''}</td>" for c in categories)
+            group_rows.append(f"""
+                <tr>
+                    <td>{idx}</td>
+                    <td>{grp}</td>
+                    <td>{ps}</td>
+                    <td>{nl}</td>
+                    {cat_cells}
+                    <td><b>{abs_cnt if abs_cnt > 0 else ''}</b></td>
+                </tr>
+            """)
+
+        has_males = any(normalize_gender(c.get("gender")) == "М" for c in cadets)
+        has_females = any(normalize_gender(c.get("gender")) == "Ж" for c in cadets)
+        gender_rows = []
+        if slice_name == "all" and has_males and has_females:
+            for g_label, g_code, num_idx in [("Мужчины", "М", len(groups) + 1), ("Женщины", "Ж", len(groups) + 2)]:
+                g_cadets = [c for c in cadets if normalize_gender(c.get("gender")) == g_code]
+                g_abs = [a for a in absences if normalize_gender(a.get("gender")) == g_code]
+                g_ps = len(g_cadets)
+                g_abs_cnt = len(g_abs)
+                g_nl = g_ps - g_abs_cnt
+                row_cats = {cat: len([a for a in g_abs if a.get("category") == cat]) for cat in categories}
+                cat_cells = "".join(f"<td>{row_cats[c] if row_cats[c] > 0 else ''}</td>" for c in categories)
+                gender_rows.append(f"""
+                    <tr>
+                        <td>{num_idx}</td>
+                        <td>{g_label}</td>
+                        <td>{g_ps}</td>
+                        <td>{g_nl}</td>
+                        {cat_cells}
+                        <td><b>{g_abs_cnt if g_abs_cnt > 0 else ''}</b></td>
+                    </tr>
+                """)
+
+        total_num = len(groups) + 3 if (slice_name == "all" and has_males and has_females) else len(groups) + 1
+        cat_total_cells = "".join(f"<td>{cat_totals[c] if cat_totals[c] > 0 else ''}</td>" for c in categories)
+        total_row = f"""
+            <tr style="font-weight: bold; background-color: #f2f2f2;">
+                <td>{total_num}</td>
+                <td>Всего</td>
+                <td>{ps_total}</td>
+                <td>{nl_total}</td>
+                {cat_total_cells}
+                <td>{abs_total if abs_total > 0 else ''}</td>
+            </tr>
+        """
+
+        cat_headers = "".join(f"<th>{c}</th>" for c in categories)
+        summary_table_html = f"""
+            <table border="1" cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; text-align: center; font-size: 9pt; margin-top: 6px; margin-bottom: 10px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2; font-weight: bold;">
+                        <th width="35">№ п/п</th>
+                        <th>Подразд.</th>
+                        <th width="50">П/С</th>
+                        <th width="50">Н/Л</th>
+                        {cat_headers}
+                        <th width="60">ВСЕГО</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(group_rows)}
+                    {''.join(gender_rows)}
+                    {total_row}
+                </tbody>
+            </table>
+        """
+
+        if not absences:
+            abs_rows_html = '<tr><td colspan="6" style="text-align: center; padding: 6px;">Все курсанты находятся в строю</td></tr>'
+        else:
+            abs_rows = []
+            for i, a in enumerate(absences, 1):
+                fio_disp = a.get("short_fio") or a.get("fio") or ""
+                rnk = a.get("rank") or "курсант"
+                grp = a.get("group_num") or ""
+                reason = a.get("type_name") or a.get("category") or ""
+                note = a.get("note") or ""
+                abs_rows.append(f"""
+                    <tr>
+                        <td align="center">{i}</td>
+                        <td align="center">{rnk}</td>
+                        <td align="left">&nbsp;{fio_disp}</td>
+                        <td align="center">{grp}</td>
+                        <td align="center">{reason}</td>
+                        <td align="left">&nbsp;{note}</td>
+                    </tr>
+                """)
+            abs_rows_html = "".join(abs_rows)
+
+        abs_table_html = f"""
+            <div style="text-align: center; font-weight: bold; font-size: 10pt; margin: 8px 0 4px 0;">Список отсутствующего личного состава</div>
+            <table border="1" cellspacing="0" cellpadding="3" width="100%" style="border-collapse: collapse; font-size: 9pt;">
+                <thead>
+                    <tr style="background-color: #f2f2f2; font-weight: bold; text-align: center;">
+                        <th width="35">№ п/п</th>
+                        <th width="100">Воинское звание</th>
+                        <th>Фамилия и инициалы</th>
+                        <th width="90">Подразделение</th>
+                        <th width="140">Причина расхода / Наряд</th>
+                        <th>Примечание</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {abs_rows_html}
+                </tbody>
+            </table>
+        """
+
+        sig_html = f"""
+            <table border="0" cellspacing="0" cellpadding="2" width="100%" style="margin-top: 14px; font-size: 10pt;">
+                <tr>
+                    <td colspan="3" align="left" style="font-weight: bold; padding-bottom: 4px;">{chief_title}</td>
+                </tr>
+                <tr>
+                    <td align="left" width="30%">{commander_rank}</td>
+                    <td align="center" width="35%" style="border-bottom: 1px solid #000; font-size: 8pt; color: #555;">(подпись)</td>
+                    <td align="right" width="35%">{commander_name}</td>
+                </tr>
+            </table>
+        """
+
+        return f"""
+            <div style="font-family: 'Times New Roman', serif; color: #000000;">
+                <div style="text-align: center; font-weight: bold; font-size: 13pt; margin-bottom: 2px;">РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА {category_subtitle}</div>
+                <div style="text-align: center; font-size: 10.5pt; margin-bottom: 2px;">{unit_title}</div>
+                <div style="text-align: center; font-size: 10pt; margin-bottom: 6px;">на {date_formatted}</div>
+
+                <div style="text-align: center; font-weight: bold; font-size: 10.5pt; margin-bottom: 8px;">
+                    По списку: <u>{ps_total}</u> чел. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    В строю: <u>{nl_total}</u> чел. &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    В расходе: <u>{abs_total}</u> чел.
+                </div>
+
+                {summary_table_html}
+                {abs_table_html}
+                {sig_html}
+            </div>
+        """
 
     def import_cadets_excel(self):
         file_path, _ = QFileDialog.getOpenFileName(

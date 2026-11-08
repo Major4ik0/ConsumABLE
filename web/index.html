@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConsumABLE v1.3.5 — Управление строевой запиской</title>
+  <title>ConsumABLE v1.3.6 — Управление строевой запиской</title>
   <link rel="stylesheet" href="style.css">
   <!-- SheetJS (xlsx) для быстрого чтения и парсинга базы курсантов -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -27,7 +27,7 @@
         <div>
           <div class="brand-title">
             ConsumABLE
-            <span class="brand-badge">v1.3.5</span>
+            <span class="brand-badge">v1.3.6</span>
           </div>
           <div class="brand-subtitle">Автономное управление строевой запиской курса</div>
         </div>
@@ -68,6 +68,11 @@
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Скачать строевую (.xlsx)
+        </button>
+
+        <button id="btn-print-expense" class="btn btn-secondary" onclick="openPrintModal()" title="Печать расхода">
+          <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+          Печать расхода
         </button>
       </div>
     </div>
@@ -558,13 +563,13 @@
             Интерактивный предпросмотр строевой записки
           </div>
           <div class="header-actions">
-            <button class="btn btn-secondary" onclick="printActiveReport()" title="Печать активного бланка расхода на А4">
+            <button class="btn btn-secondary" onclick="openPrintModal()" title="Печать суточного расхода (А4 Альбомная)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 6 2 18 2 18 9"/>
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
                 <rect x="6" y="14" width="12" height="8"/>
               </svg>
-              Печать (А4)
+              Печать расхода
             </button>
             <button class="btn btn-primary" onclick="generateExcelReport()" title="Скачать строевую записку (.xlsx)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -605,7 +610,7 @@
 
     <!-- Подвал приложения с информацией об авторе -->
     <footer class="app-footer">
-      <span>ConsumABLE v1.3.5</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
+      <span>ConsumABLE v1.3.6</span> • <span>Создал: <strong>Журавлев Алексей</strong></span>
     </footer>
 
   </main>
@@ -842,6 +847,105 @@
       </div>
     </div>
   </div>
+
+  <!-- Модальное окно выбора варианта печати расхода -->
+  <div id="printExpenseModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <svg style="width: 20px; height: 20px; color: var(--primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Печать суточного расхода (А4 Альбомная)
+        </div>
+        <button class="modal-close" onclick="closePrintModal()">
+          <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+          Выберите ведомость для вывода на печать. Документ оптимизирован под стандартный лист А4 в альбомной ориентации (Landscape).
+        </p>
+
+        <div class="print-option-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <label class="print-option-card">
+            <input type="radio" name="printVariant" value="all" checked>
+            <div class="print-option-content">
+              <div class="print-option-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Общий расход
+              </div>
+              <div class="print-option-desc">Весь личный состав курса (сводная ведомость)</div>
+            </div>
+          </label>
+
+          <label class="print-option-card">
+            <input type="radio" name="printVariant" value="male">
+            <div class="print-option-content">
+              <div class="print-option-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+                Мужской состав (Парни)
+              </div>
+              <div class="print-option-desc">Только юноши курса и их суточный расход</div>
+            </div>
+          </label>
+
+          <label class="print-option-card">
+            <input type="radio" name="printVariant" value="female">
+            <div class="print-option-content">
+              <div class="print-option-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+                  <path d="M12 2a5 5 0 0 1 5 5c0 2.3-1.5 4.3-3.6 4.9l1.6 4.1h2a1 1 0 0 1 0 2h-2v4a1 1 0 0 1-2 0v-4h-2a1 1 0 0 1 0-2h2l1.6-4.1C10.5 11.3 9 9.3 9 7a5 5 0 0 1 5-5z"/><circle cx="12" cy="7" r="3"/>
+                </svg>
+                Женский состав (Девушки)
+              </div>
+              <div class="print-option-desc">Только девушки курса и их суточный расход</div>
+            </div>
+          </label>
+
+          <label class="print-option-card">
+            <input type="radio" name="printVariant" value="all_three">
+            <div class="print-option-content">
+              <div class="print-option-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+                  <polyline points="6 9 6 2 18 2 18 9"/>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                  <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+                Печатать все 3 ведомости
+              </div>
+              <div class="print-option-desc">Общий + Мужской + Женский составы (каждая ведомость с нового листа А4)</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closePrintModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="executePrintSelectedVariant()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Сформировать и напечатать
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Контейнер для вывода на печать -->
+  <div id="printable-sheet-container"></div>
 
   <!-- Toast контейнер -->
   <div id="toastContainer" class="toast-container"></div>

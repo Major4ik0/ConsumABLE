@@ -1728,16 +1728,245 @@ function switchPreviewSlice(slice) {
   renderLivePreview(slice);
 }
 
-function printActiveReport() {
+function openPrintModal() {
   if (state.cadets.length === 0) {
     showToast("Сначала загрузите базу личного состава!", "danger");
     return;
   }
-  window.print();
+  const modal = document.getElementById("printExpenseModal");
+  if (modal) modal.classList.add("active");
+}
+
+function closePrintModal() {
+  const modal = document.getElementById("printExpenseModal");
+  if (modal) modal.classList.remove("active");
+}
+
+function generatePrintSheetHtml(slice = 'all') {
+  let cadets = state.cadets;
+  let absences = state.absences;
+  let categorySubtitle = "(Общий состав)";
+
+  if (slice === 'male') {
+    cadets = state.cadets.filter(c => c.gender === 'М' || c.gender === 'male' || c.gender === 'M');
+    absences = state.absences.filter(a => a.gender === 'М' || a.gender === 'male' || a.gender === 'M');
+    categorySubtitle = "(Мужской состав)";
+  } else if (slice === 'female') {
+    cadets = state.cadets.filter(c => c.gender === 'Ж' || c.gender === 'female' || c.gender === 'F');
+    absences = state.absences.filter(a => a.gender === 'Ж' || a.gender === 'female' || a.gender === 'F');
+    categorySubtitle = "(Женский состав)";
+  }
+
+  const psTotal = cadets.length;
+  const absTotal = absences.length;
+  const nlTotal = psTotal - absTotal;
+
+  const unitTitle = (document.getElementById('unitTitle')?.value || state.settings.unitTitle || "").trim();
+  const chiefTitle = (document.getElementById('chiefTitle')?.value || state.settings.chiefTitle || "").trim();
+  const commanderRank = (document.getElementById('commanderRank')?.value || state.settings.commanderRank || "").trim();
+  const commanderName = (document.getElementById('commanderName')?.value || state.settings.commanderName || "").trim();
+  const reportDate = document.getElementById('reportDate')?.value || state.settings.reportDate;
+
+  const standardCategories = ["Наряд", "Госпиталь", "Лазарет", "Командировка", "Похороны"];
+  const activeAbsenceCategories = [...new Set(absences.map(a => a.category))];
+  const orderedCats = standardCategories.filter(c => activeAbsenceCategories.includes(c) || true);
+  const otherCats = activeAbsenceCategories.filter(c => !standardCategories.includes(c));
+  const categories = [...orderedCats, ...otherCats];
+
+  const groupOrderMap = {};
+  cadets.forEach(c => {
+    if (!(c.group_num in groupOrderMap)) groupOrderMap[c.group_num] = c.sort_order || 0;
+  });
+  const groups = Object.keys(groupOrderMap).sort((a, b) => groupOrderMap[a] - groupOrderMap[b]);
+
+  let catTotals = {};
+  categories.forEach(c => { catTotals[c] = 0; });
+
+  let groupRowsHtml = "";
+  groups.forEach((grp, idx) => {
+    const grpCadets = cadets.filter(c => c.group_num === grp);
+    const ps = grpCadets.length;
+    const grpAbs = absences.filter(a => a.group_num === grp);
+    const grpAbsTotal = grpAbs.length;
+    const nl = ps - grpAbsTotal;
+
+    const rowCounts = {};
+    categories.forEach(cat => {
+      const cnt = grpAbs.filter(a => a.category === cat).length;
+      rowCounts[cat] = cnt;
+      catTotals[cat] += cnt;
+    });
+
+    groupRowsHtml += `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(grp)}</td>
+        <td>${ps}</td>
+        <td>${nl}</td>
+        ${categories.map(c => `<td>${rowCounts[c] > 0 ? rowCounts[c] : ""}</td>`).join("")}
+        <td><strong>${grpAbsTotal > 0 ? grpAbsTotal : ""}</strong></td>
+      </tr>
+    `;
+  });
+
+  const hasMales = cadets.some(c => c.gender === 'М' || c.gender === 'male' || c.gender === 'M');
+  const hasFemales = cadets.some(c => c.gender === 'Ж' || c.gender === 'female' || c.gender === 'F');
+
+  let genderRowsHtml = "";
+  if (slice === 'all' && hasMales && hasFemales) {
+    genderRowsHtml = [
+      { label: "Мужчины", val: ["М", "male", "M"], numIdx: groups.length + 1 },
+      { label: "Женщины", val: ["Ж", "female", "F"], numIdx: groups.length + 2 }
+    ].map(g => {
+      const gCadets = cadets.filter(c => g.val.includes(c.gender));
+      const gPs = gCadets.length;
+      const gAbs = absences.filter(a => g.val.includes(a.gender));
+      const gNl = gPs - gAbs.length;
+
+      const rowCounts = {};
+      categories.forEach(cat => {
+        rowCounts[cat] = gAbs.filter(a => a.category === cat).length;
+      });
+
+      return `
+        <tr>
+          <td>${g.numIdx}</td>
+          <td>${g.label}</td>
+          <td>${gPs}</td>
+          <td>${gNl}</td>
+          ${categories.map(c => `<td>${rowCounts[c] > 0 ? rowCounts[c] : ""}</td>`).join("")}
+          <td><strong>${gAbs.length > 0 ? gAbs.length : ""}</strong></td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  const totalNumIdx = (slice === 'all' && hasMales && hasFemales) ? groups.length + 3 : groups.length + 1;
+  const totalRowHtml = `
+    <tr style="font-weight: bold; background-color: #f2f2f2;">
+      <td>${totalNumIdx}</td>
+      <td>Всего</td>
+      <td>${psTotal}</td>
+      <td>${nlTotal}</td>
+      ${categories.map(c => `<td>${catTotals[c] > 0 ? catTotals[c] : ""}</td>`).join("")}
+      <td>${absTotal > 0 ? absTotal : ""}</td>
+    </tr>
+  `;
+
+  let absencesRowsHtml = "";
+  if (absences.length === 0) {
+    absencesRowsHtml = `<tr><td colspan="6" style="text-align: center; padding: 8px;">Все курсанты находятся в строю</td></tr>`;
+  } else {
+    absences.forEach((a, idx) => {
+      absencesRowsHtml += `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${escapeHtml(a.rank || "курсант")}</td>
+          <td class="text-left" style="padding-left: 8px;">${escapeHtml(a.short_fio || a.fio || "")}</td>
+          <td>${escapeHtml(a.group_num || "")}</td>
+          <td>${escapeHtml(a.type_name || a.category || "")}</td>
+          <td class="text-left" style="padding-left: 8px;">${escapeHtml(a.note || "")}</td>
+        </tr>
+      `;
+    });
+  }
+
+  return `
+    <div style="text-align: center; font-weight: bold; font-size: 13pt; margin-bottom: 3px;">РАЗВЕРНУТАЯ СТРОЕВАЯ ЗАПИСКА ${categorySubtitle}</div>
+    <div style="text-align: center; font-size: 11pt; margin-bottom: 3px;">${escapeHtml(unitTitle)}</div>
+    <div style="text-align: center; font-size: 10.5pt; margin-bottom: 6px;">на ${escapeHtml(formatDateRussian(reportDate))}</div>
+
+    <div style="text-align: center; margin: 4px 0 8px 0; font-weight: bold; font-size: 10.5pt;">
+      <span>По списку: <u>${psTotal}</u> чел.</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <span>В строю: <u>${nlTotal}</u> чел.</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <span>В расходе: <u>${absTotal}</u> чел.</span>
+    </div>
+
+    <table class="print-table">
+      <thead>
+        <tr>
+          <th style="width: 38px;">№ п/п</th>
+          <th>Подразд.</th>
+          <th style="width: 55px;">П/С</th>
+          <th style="width: 55px;">Н/Л</th>
+          ${categories.map(c => `<th>${escapeHtml(c)}</th>`).join("")}
+          <th style="width: 65px;">ВСЕГО</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${groupRowsHtml}
+        ${genderRowsHtml}
+        ${totalRowHtml}
+      </tbody>
+    </table>
+
+    <div style="text-align: center; font-weight: bold; font-size: 11pt; margin: 8px 0 4px 0;">Список отсутствующего личного состава</div>
+    <table class="print-table">
+      <thead>
+        <tr>
+          <th style="width: 38px;">№ п/п</th>
+          <th style="width: 110px;">Воинское звание</th>
+          <th>Фамилия и инициалы</th>
+          <th style="width: 100px;">Подразделение</th>
+          <th style="width: 150px;">Причина расхода / Наряд</th>
+          <th>Примечание</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${absencesRowsHtml}
+      </tbody>
+    </table>
+
+    <table style="width: 100%; max-width: 650px; margin-top: 14px; border: none; border-collapse: collapse; page-break-inside: avoid;">
+      <tr>
+        <td colspan="3" style="border: none; text-align: left; font-weight: bold; padding-bottom: 4px; font-size: 10.5pt;">${escapeHtml(chiefTitle)}</td>
+      </tr>
+      <tr>
+        <td style="border: none; text-align: left; width: 30%; font-size: 10pt;">${escapeHtml(commanderRank)}</td>
+        <td style="border: none; border-bottom: 1px solid #000; width: 35%; text-align: center; font-size: 8.5pt; color: #555;">(подпись)</td>
+        <td style="border: none; text-align: right; width: 35%; font-size: 10pt;">${escapeHtml(commanderName)}</td>
+      </tr>
+    </table>
+  `;
+}
+
+function executePrintSelectedVariant() {
+  const selectedRadio = document.querySelector('input[name="printVariant"]:checked');
+  const variant = selectedRadio ? selectedRadio.value : 'all';
+  closePrintModal();
+
+  if (state.cadets.length === 0) {
+    showToast("Сначала загрузите базу личного состава!", "danger");
+    return;
+  }
+
+  const container = document.getElementById("printable-sheet-container");
+  if (!container) return;
+
+  let pagesHtml = "";
+  if (variant === 'all_three') {
+    pagesHtml += `<div class="print-sheet-page">${generatePrintSheetHtml('all')}</div>`;
+    pagesHtml += `<div class="print-sheet-page">${generatePrintSheetHtml('male')}</div>`;
+    pagesHtml += `<div class="print-sheet-page">${generatePrintSheetHtml('female')}</div>`;
+  } else {
+    pagesHtml += `<div class="print-sheet-page">${generatePrintSheetHtml(variant)}</div>`;
+  }
+
+  container.innerHTML = pagesHtml;
+  setTimeout(() => {
+    window.print();
+  }, 100);
+}
+
+function printActiveReport() {
+  openPrintModal();
 }
 
 window.switchPreviewSlice = switchPreviewSlice;
-window.printActiveReport = printActiveReport;
+window.openPrintModal = openPrintModal;
+window.closePrintModal = closePrintModal;
+window.executePrintSelectedVariant = executePrintSelectedVariant;
+window.printActiveReport = openPrintModal;
 window.generateExcelReport = generateExcelReport;
 
 function renderLivePreview(slice = state.activePreviewSlice || 'total') {
@@ -2120,6 +2349,9 @@ function handleResetAll() {
 
   const fileInput = document.getElementById('excelFileInput');
   if (fileInput) fileInput.value = '';
+
+  const printContainer = document.getElementById('printable-sheet-container');
+  if (printContainer) printContainer.innerHTML = '';
 
   syncChiefName();
 
